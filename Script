@@ -1,0 +1,411 @@
+--[[
+    ⚽ AUTO DRIBBLE (Executor Version)
+    รองรับ: Delta, Fluxus, Hydrogen, Codex, Arceus X, Wave
+    วิธีใช้: คัดลอกทั้งหมด → วางใน executor → Execute
+    ปุ่มจะโผล่มุมขวาล่างของจอ
+]]
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+
+local LP = Players.LocalPlayer
+
+-- ========== ลบ GUI เก่าถ้ามี ==========
+if LP:WaitForChild("PlayerGui"):FindFirstChild("AutoDribbleUI_Exec") then
+    LP.PlayerGui.AutoDribbleUI_Exec:Destroy()
+end
+
+-- ========== สร้าง GUI ==========
+local gui = Instance.new("ScreenGui")
+gui.Name = "AutoDribbleUI_Exec"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.DisplayOrder = 999
+gui.Parent = LP:WaitForChild("PlayerGui")
+
+-- ========== ปุ่มหลัก (ลากได้) ==========
+local btn = Instance.new("TextButton")
+btn.Name = "MainBtn"
+btn.Size = UDim2.new(0, 85, 0, 85)
+btn.Position = UDim2.new(1, -105, 1, -190)
+btn.BackgroundColor3 = Color3.fromRGB(40, 200, 80)
+btn.BackgroundTransparency = 0.1
+btn.Text = "⚽\nAUTO"
+btn.TextColor3 = Color3.new(1, 1, 1)
+btn.TextScaled = true
+btn.Font = Enum.Font.GothamBold
+btn.BorderSizePixel = 0
+btn.AutoButtonColor = false
+btn.Active = false
+btn.Parent = gui
+
+Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
+local stroke = Instance.new("UIStroke", btn)
+stroke.Color = Color3.fromRGB(255, 255, 255)
+stroke.Thickness = 2
+stroke.Transparency = 0.3
+
+-- ========== ปุ่มตั้งค่า ==========
+local settingsBtn = Instance.new("TextButton")
+settingsBtn.Size = UDim2.new(0, 42, 0, 42)
+settingsBtn.Position = UDim2.new(1, -62, 1, -245)
+settingsBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
+settingsBtn.Text = "⚙"
+settingsBtn.TextScaled = true
+settingsBtn.Font = Enum.Font.GothamBold
+settingsBtn.TextColor3 = Color3.new(1, 1, 1)
+settingsBtn.BorderSizePixel = 0
+settingsBtn.Parent = gui
+Instance.new("UICorner", settingsBtn).CornerRadius = UDim.new(1, 0)
+
+-- ========== Panel ตั้งค่า ==========
+local panel = Instance.new("Frame")
+panel.Size = UDim2.new(0, 210, 0, 170)
+panel.Position = UDim2.new(1, -225, 1, -430)
+panel.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+panel.Visible = false
+panel.Active = true
+panel.Parent = gui
+Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 12)
+local pStroke = Instance.new("UIStroke", panel)
+pStroke.Color = Color3.fromRGB(80, 200, 255)
+pStroke.Thickness = 1
+pStroke.Transparency = 0.4
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 28)
+title.Position = UDim2.new(0, 0, 0, 6)
+title.BackgroundTransparency = 1
+title.Text = "⚙ ตั้งค่า"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.Font = Enum.Font.GothamBold
+title.TextScaled = true
+title.Parent = panel
+
+-- Slider ความเร็ว
+local spdLabel = Instance.new("TextLabel")
+spdLabel.Size = UDim2.new(1, -20, 0, 18)
+spdLabel.Position = UDim2.new(0, 10, 0, 36)
+spdLabel.BackgroundTransparency = 1
+spdLabel.Text = "ความเร็ว: 25"
+spdLabel.TextColor3 = Color3.fromRGB(180, 220, 255)
+spdLabel.Font = Enum.Font.Gotham
+spdLabel.TextSize = 13
+spdLabel.TextXAlignment = Enum.TextXAlignment.Left
+spdLabel.Parent = panel
+
+local slider = Instance.new("Frame")
+slider.Size = UDim2.new(1, -20, 0, 16)
+slider.Position = UDim2.new(0, 10, 0, 58)
+slider.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
+slider.Parent = panel
+Instance.new("UICorner", slider).CornerRadius = UDim.new(1, 0)
+
+local fill = Instance.new("Frame")
+fill.Size = UDim2.new(0.5, 0, 1, 0)
+fill.BackgroundColor3 = Color3.fromRGB(80, 200, 255)
+fill.Parent = slider
+Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+
+local knob = Instance.new("Frame")
+knob.Size = UDim2.new(0, 20, 0, 20)
+knob.Position = UDim2.new(0.5, -10, 0, -2)
+knob.BackgroundColor3 = Color3.new(1, 1, 1)
+knob.Parent = slider
+Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+
+-- Toggle หลบศัตรู
+local dodgeBtn = Instance.new("TextButton")
+dodgeBtn.Size = UDim2.new(1, -20, 0, 28)
+dodgeBtn.Position = UDim2.new(0, 10, 0, 86)
+dodgeBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 120)
+dodgeBtn.Text = "✅ หลบศัตรู: เปิด"
+dodgeBtn.TextColor3 = Color3.new(1, 1, 1)
+dodgeBtn.Font = Enum.Font.GothamBold
+dodgeBtn.TextSize = 13
+dodgeBtn.Parent = panel
+Instance.new("UICorner", dodgeBtn).CornerRadius = UDim.new(0, 8)
+
+-- Toggle เข้าประตู
+local goalBtn = Instance.new("TextButton")
+goalBtn.Size = UDim2.new(1, -20, 0, 28)
+goalBtn.Position = UDim2.new(0, 10, 0, 118)
+goalBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 120)
+goalBtn.Text = "✅ วิ่งเข้าประตู: เปิด"
+goalBtn.TextColor3 = Color3.new(1, 1, 1)
+goalBtn.Font = Enum.Font.GothamBold
+goalBtn.TextSize = 13
+goalBtn.Parent = panel
+Instance.new("UICorner", goalBtn).CornerRadius = UDim.new(0, 8)
+
+-- ========== State ==========
+local isActive = false
+local moveSpeed = 25
+local doDodge = true
+local doGoal = true
+local connection
+local lastPos = Vector3.zero
+
+-- ========== ฟังก์ชันหา Goal ==========
+local function findGoal()
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            local n = obj.Name:lower()
+            if n:find("goal") or n:find("net") or n:find("post") then
+                if not obj:IsDescendantOf(LP.Character or game) then
+                    return obj
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- ========== หาศัตรูใกล้สุด ==========
+local function findNearestEnemy(char)
+    local myTeam = LP.Team
+    local myPos = char.HumanoidRootPart.Position
+    local nearest, nearestDist = nil, 22
+
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LP and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            local ok = true
+            if myTeam and plr.Team then
+                if plr.Team == myTeam then ok = false end
+            end
+            if ok then
+                local d = (plr.Character.HumanoidRootPart.Position - myPos).Magnitude
+                if d < nearestDist then
+                    nearestDist = d
+                    nearest = plr.Character.HumanoidRootPart.Position
+                end
+            end
+        end
+    end
+    return nearest
+end
+
+-- ========== หาบอล ==========
+local function findBall()
+    local names = {"ball", "soccerball", "football", "soccer ball"}
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            local n = obj.Name:lower()
+            for _, bn in ipairs(names) do
+                if n == bn or n:find(bn) then
+                    return obj
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- ========== คำนวณทิศทาง ==========
+local function getDirection(char)
+    local hrp = char.HumanoidRootPart
+    local goal = doGoal and findGoal()
+    if goal then
+        return (goal.Position - hrp.Position).Unit
+    end
+    return hrp.CFrame.LookVector
+end
+
+-- ========== อัปเดตทิศหลบ ==========
+local function applyDodge(char, dir)
+    if not doDodge then return dir end
+    local enemyPos = findNearestEnemy(char)
+    if not enemyPos then return dir end
+
+    local hrp = char.HumanoidRootPart
+    local toEnemy = (enemyPos - hrp.Position).Unit
+    local right = hrp.CFrame.RightVector
+
+    -- ถ้าศัตรูขวางหน้าอยู่ ให้เบี่ยงข้าง
+    if dir:Dot(toEnemy) > 0.45 then
+        local side = (right:Dot(toEnemy) > 0) and -1 or 1
+        dir = (dir + right * side * 0.9).Unit
+    end
+    return dir
+end
+
+-- ========== ขยับบอล (ถ้าเราเป็นเจ้าของ) ==========
+local function tryMoveBall(char)
+    local ball = findBall()
+    if not ball then return end
+    -- เช็ค network ownership
+    local ok, owner = pcall(function() return ball:GetNetworkOwner() end)
+    if ok and owner == LP then
+        local hrp = char.HumanoidRootPart
+        local targetPos = hrp.Position + hrp.CFrame.LookVector * 2.2 + Vector3.new(0, 0.8, 0)
+        -- interpolate นุ่มๆ
+        local newCF = CFrame.new(targetPos) * CFrame.Angles(0, math.atan2(hrp.CFrame.LookVector.X, hrp.CFrame.LookVector.Z), 0)
+        ball.CFrame = ball.CFrame:Lerp(newCF, 0.35)
+    end
+end
+
+-- ========== ลูปหลัก ==========
+local function start()
+    local char = LP.Character or LP.CharacterAdded:Wait()
+    local hum = char:WaitForChild("Humanoid")
+
+    connection = RunService.Heartbeat:Connect(function()
+        if not isActive then return end
+        local c = LP.Character
+        if not c or not c:FindFirstChild("HumanoidRootPart") then return end
+        local h = c:FindFirstChildOfClass("Humanoid")
+        if not h or h.Health <= 0 then return end
+
+        local dir = getDirection(c)
+        dir = applyDodge(c, dir)
+
+        -- ใช้ Move() เหมือนกด joystick
+        h:Move(dir * (moveSpeed / 16), false)
+
+        -- ขยับบอลถ้าเป็นเจ้าของ
+        tryMoveBall(c)
+    end)
+end
+
+local function stop()
+    isActive = false
+    if connection then
+        connection:Disconnect()
+        connection = nil
+    end
+    local c = LP.Character
+    if c and c:FindFirstChildOfClass("Humanoid") then
+        c.Humanoid:Move(Vector3.zero, false)
+    end
+end
+
+-- ========== Toggle State ==========
+local function setState(on)
+    isActive = on
+    if on then
+        btn.BackgroundColor3 = Color3.fromRGB(255, 190, 30)
+        btn.Text = "⚽\nON"
+        stroke.Color = Color3.fromRGB(255, 240, 100)
+        start()
+    else
+        btn.BackgroundColor3 = Color3.fromRGB(40, 200, 80)
+        btn.Text = "⚽\nAUTO"
+        stroke.Color = Color3.fromRGB(255, 255, 255)
+        stop()
+    end
+end
+
+-- ========== ปุ่มกด (รองรับ Touch + Mouse) ==========
+btn.MouseButton1Click:Connect(function() setState(not isActive) end)
+btn.TouchTap:Connect(function() setState(not isActive) end)
+
+-- ========== ลากปุ่ม (Drag) ==========
+local function makeDraggable(frame, handle)
+    local dragging = false
+    local dragStart, startPos
+
+    handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch
+        or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            -- เช็คว่าเป็นการแตะสั้น ไม่ใช่ลาก
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if not dragging then return end
+        if input.UserInputType == Enum.UserInputType.Touch
+        or input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = input.Position - dragStart
+            -- ถ้าลากเกิน 10px ถือว่า drag (ไม่ trigger click)
+            if delta.Magnitude > 10 then
+                frame.Position = UDim2.new(
+                    startPos.X.Scale, startPos.X.Offset + delta.X,
+                    startPos.Y.Scale, startPos.Y.Offset + delta.Y
+                )
+            end
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch
+        or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+end
+
+makeDraggable(btn, btn)
+makeDraggable(panel, title) -- ลาก panel ได้
+
+-- ========== ตั้งค่าปุ่ม ==========
+settingsBtn.MouseButton1Click:Connect(function() panel.Visible = not panel.Visible end)
+settingsBtn.TouchTap:Connect(function() panel.Visible = not panel.Visible end)
+
+-- Slider drag
+local sliderDrag = false
+slider.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch
+    or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        sliderDrag = true
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if not sliderDrag then return end
+    if input.UserInputType == Enum.UserInputType.Touch
+    or input.UserInputType == Enum.UserInputType.MouseMovement then
+        local rel = input.Position.X - slider.AbsolutePosition.X
+        local pct = math.clamp(rel / slider.AbsoluteSize.X, 0, 1)
+        fill.Size = UDim2.new(pct, 0, 1, 0)
+        knob.Position = UDim2.new(pct, -10, 0, -2)
+        moveSpeed = math.floor(12 + pct * 38) -- 12–50
+        spdLabel.Text = "ความเร็ว: " .. moveSpeed
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch
+    or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        sliderDrag = false
+    end
+end)
+
+-- Toggle dodge
+dodgeBtn.MouseButton1Click:Connect(function()
+    doDodge = not doDodge
+    dodgeBtn.Text = (doDodge and "✅" or "❌") .. " หลบศัตรู: " .. (doDodge and "เปิด" or "ปิด")
+    dodgeBtn.BackgroundColor3 = doDodge and Color3.fromRGB(40,180,120) or Color3.fromRGB(180,60,60)
+end)
+dodgeBtn.TouchTap:Connect(function()
+    doDodge = not doDodge
+    dodgeBtn.Text = (doDodge and "✅" or "❌") .. " หลบศัตรู: " .. (doDodge and "เปิด" or "ปิด")
+    dodgeBtn.BackgroundColor3 = doDodge and Color3.fromRGB(40,180,120) or Color3.fromRGB(180,60,60)
+end)
+
+-- Toggle goal
+goalBtn.MouseButton1Click:Connect(function()
+    doGoal = not doGoal
+    goalBtn.Text = (doGoal and "✅" or "❌") .. " วิ่งเข้าประตู: " .. (doGoal and "เปิด" or "ปิด")
+    goalBtn.BackgroundColor3 = doGoal and Color3.fromRGB(40,180,120) or Color3.fromRGB(180,60,60)
+end)
+goalBtn.TouchTap:Connect(function()
+    doGoal = not doGoal
+    goalBtn.Text = (doGoal and "✅" or "❌") .. " วิ่งเข้าประตู: " .. (doGoal and "เปิด" or "ปิด")
+    goalBtn.BackgroundColor3 = doGoal and Color3.fromRGB(40,180,120) or Color3.fromRGB(180,60,60)
+end)
+
+-- ========== Reset เมื่อเกิดใหม่ ==========
+LP.CharacterAdded:Connect(function()
+    if isActive then
+        stop()
+        setState(false)
+    end
+end)
+
+print("[Auto Dribble] โหลดสำเร็จ! กดปุ่ม ⚽ มุมขวาล่างเพื่อเปิด")
