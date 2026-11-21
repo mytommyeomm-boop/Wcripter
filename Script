@@ -1,13 +1,13 @@
 --[[
     ╔══════════════════════════════════════════════════════════════╗
-    ║  🎨 CLAY-FPS v5.3.1 FINAL — MOBILE EDITION                   ║
+    ║  🎨 CLAY-FPS v5.3.2 FINAL — MOBILE EDITION                   ║
     ║                                                              ║
     ║  ✓ Auto-Reload (rerun-safe)                                  ║
-    ║  ✓ Clay Look + FPS Boost                                     ║
-    ║  ✓ Low Ping + 120 FPS                                        ║
+    ║  ✓ Clay Look (FIXED: independent material loop)              ║
+    ║  ✓ FPS Boost + Low Ping + 120 FPS                            ║
     ║  ✓ Smart HUD (FPS + Ping + Ball status)                      ║
     ║  ✓ Toast Notification                                        ║
-    ║  ✓ Long-Session Stable                                       ║
+    ║  ✓ Long-Session Stable (O(1) queue + memory prune)           ║
     ║  ✓ Camera Flick Fix (motion gate)                            ║
     ║  ✓ Safe Mode (Protected Paths + Animation Pause)             ║
     ║  ✓ Ball Smoother (proxy + interpolation + extrapolation)     ║
@@ -58,11 +58,12 @@ local CONFIG = {
 
     -- Clay Look
     ClayLook = true,
+    ClayMapToo = false,              -- ★ true = clay ทุก part รวม map (เปลือง FPS กว่า)
     ClayGrade = true,
     MuteColors = false,
     CacheMaterialForRestore = true,
 
-    -- Cleanup passes
+    -- Cleanup
     RemoveTextures = true,
     RemoveEffects = true,
     RemoveLights = true,
@@ -77,10 +78,10 @@ local CONFIG = {
     KillWater = true,
     KillViewportGui = true,
 
-    -- ★★★ Fog Remover ★★★
+    -- Fog Remover
     RemoveAllFog = true,
 
-    -- ★★★ Unneeded Objects Remover ★★★
+    -- Unneeded Objects Remover
     RemoveUnneededObjects = true,
     UnneededObjectPaths = {
         "Workspace.Effects",
@@ -91,7 +92,7 @@ local CONFIG = {
         "Workspace.temp",
         "Workspace.Terrain.TempVFX",
         "Workspace.Terrain.AnimationRequesterTemperaryFolderForStuff5077795305",
-        -- เปิด comment ถ้าต้องการ boost เพิ่ม (แลกกับความสวย)
+        -- เปิด comment ถ้าต้องการ boost เพิ่ม
         -- "Workspace.map.EmotePreviewArea",
         -- "Workspace.map.something",
         -- "Workspace.map.map.Billboards",
@@ -108,12 +109,12 @@ local CONFIG = {
 
     -- Character / Sound
     FreezeFarAnimators = true,
-    FreezeAnimationMethod = "Pause",  -- "Pause" | "Destroy" | "None"
+    FreezeAnimationMethod = "Pause",
     FreezeDistance = 60,
     UnfreezeDistance = 30,
     CleanFarHumanoids = true,
     MuteWorkspaceSFX = true,
-    SoundMuteMode = "Mute",           -- "Mute" | "Destroy"
+    SoundMuteMode = "Mute",
     MuteSFX = false,
 
     -- Lighting
@@ -140,9 +141,9 @@ local CONFIG = {
     PlayerHighlight = false,
     MaxHighlights = 40,
 
-    -- ★★★ Ball Smoother ★★★
+    -- Ball Smoother
     BallSmoothing = true,
-    BallPredictionMode = "Lead",       -- "Lead" | "Lag" | "Off"
+    BallPredictionMode = "Lead",
     BallCompensatePing = true,
     BallBaseDelay = 0.03,
     BallNearDelay = 0.01,
@@ -182,6 +183,11 @@ local CONFIG = {
     CamBurstAfter = 80,
     MatBatchPerFrame = 4,
 
+    -- ★ NEW: Material drain tuning (v5.3.2)
+    MatBatchBurstIdle = 5,          -- วินาที idle ก่อน burst
+    MatBatchBurstCount = 100,       -- burst กี่ parts ต่อครั้ง
+    MatAdaptiveMultiplier = true,   -- queue เยอะ → เพิ่ม rate อัตโนมัติ
+
     -- Auto-Aggressive
     AutoAggressive = false,
     AggroAfter = 8,
@@ -200,24 +206,20 @@ local CONFIG = {
 -- 🧠 STATE
 -- ============================================================
 local CLAY = {
-    Connections = {},
-    Threads = {},
-    Instances = {},
+    Connections = {}, Threads = {}, Instances = {},
     Processed = setmetatable({}, {__mode = "k"}),
     Hitboxed = setmetatable({}, {__mode = "k"}),
     HighlightCount = 0,
-    Running = true,
-    Paused = false,
-    Version = 5.31,
+    Running = true, Paused = false, Version = 5.32,
     Stats = { fps = 0, ping = 0, frameTime = 0 },
-    Aggressive = false,
-    Dirty = false,
+    Aggressive = false, Dirty = false,
     FrozenChars = setmetatable({}, {__mode = "k"}),
     OriginalMaterial = setmetatable({}, {__mode = "k"}),
     OriginalTexture = setmetatable({}, {__mode = "k"}),
     OriginalSound = setmetatable({}, {__mode = "k"}),
     HiddenLights = setmetatable({}, {__mode = "k"}),
     BallData = {},
+    MaterialAppliedCount = 0,   -- ★ debug counter
 }
 GENV.ClayFPS = CLAY
 
@@ -916,9 +918,10 @@ local function removeUnneededObjects()
 end
 
 -- ============================================================
--- 🧱 MATERIAL BATCH
+-- 🧱 MATERIAL BATCH (FIXED: safety flush + adaptive + ClayMapToo)
 -- ============================================================
 local matQueue, matHead, matTail, matSize = {}, 1, 0, 0
+local matLastFlush = os.clock()
 
 local function queueMaterial(part)
     if not part or not part.Parent then return end
@@ -929,44 +932,71 @@ local function queueMaterial(part)
 end
 
 local function drainMaterials(maxN)
+    -- Motion gate
     if camIsRotating() then
-        if CONFIG.CamMaterialDuringMotion <= 0 then return end
+        if CONFIG.CamMaterialDuringMotion <= 0 then
+            matLastFlush = os.clock()
+            return
+        end
         maxN = CONFIG.CamMaterialDuringMotion
     end
-    if matSize == 0 then return end
+
+    if matSize == 0 then
+        matLastFlush = os.clock()
+        return
+    end
+
+    -- ★ Safety flush: queue ค้างนานเกินไป → burst
+    local idleTime = os.clock() - matLastFlush
+    if idleTime > CONFIG.MatBatchBurstIdle and not camIsRotating() then
+        maxN = math.max(maxN or CONFIG.MatBatchPerFrame, CONFIG.MatBatchBurstCount)
+        if CONFIG.DebugMemory then
+            print(("[CLAY-FPS] ⚡ Material flush burst (%d queued, idle %.1fs)")
+                :format(matSize, idleTime))
+        end
+    end
+
     local n = math.min(matSize, maxN or CONFIG.MatBatchPerFrame)
     for _ = 1, n do
         local p = matQueue[matHead]
         matQueue[matHead] = nil
         matHead = matHead + 1
         matSize = matSize - 1
-        if p and p.Parent and not isProtected(p) and not isLocalChar(p)
-            and p.Name ~= "CLAY_BALLPROXY" then
-            pcall(function()
-                if CONFIG.CacheMaterialForRestore and not CLAY.OriginalMaterial[p] then
-                    CLAY.OriginalMaterial[p] = {
-                        Material = p.Material,
-                        Reflectance = p.Reflectance,
-                        CastShadow = p.CastShadow,
-                        Color = p.Color,
-                        TextureID = p:IsA("MeshPart") and p.TextureID or nil,
-                    }
-                end
-                p.Material = Enum.Material.SmoothPlastic
-                p.Reflectance = 0
-                p.CastShadow = false
-                if CONFIG.MuteColors and p.Color then
-                    local c = p.Color
-                    local g = c.R*0.299 + c.G*0.587 + c.B*0.114
-                    p.Color = Color3.new(c.R*0.55+g*0.45, c.G*0.55+g*0.45, c.B*0.55+g*0.45)
-                end
-                if p:IsA("MeshPart") then
-                    if CONFIG.RemoveTextures then p.TextureID = "" end
-                    p.MaterialVariant = ""
-                end
-            end)
+        if p and p.Parent and p.Name ~= "CLAY_BALLPROXY" then
+            -- ★ ClayMapToo: ถ้า true → clay ทุกอย่าง, ถ้า false → skip protected
+            local canApply = CONFIG.ClayMapToo
+                or (not isProtected(p) and not isLocalChar(p))
+            if canApply then
+                pcall(function()
+                    if CONFIG.CacheMaterialForRestore and not CLAY.OriginalMaterial[p] then
+                        CLAY.OriginalMaterial[p] = {
+                            Material = p.Material,
+                            Reflectance = p.Reflectance,
+                            CastShadow = p.CastShadow,
+                            Color = p.Color,
+                            TextureID = p:IsA("MeshPart") and p.TextureID or nil,
+                        }
+                    end
+                    p.Material = Enum.Material.SmoothPlastic
+                    p.Reflectance = 0
+                    p.CastShadow = false
+                    if CONFIG.MuteColors and p.Color then
+                        local c = p.Color
+                        local g = c.R*0.299 + c.G*0.587 + c.B*0.114
+                        p.Color = Color3.new(c.R*0.55+g*0.45, c.G*0.55+g*0.45, c.B*0.55+g*0.45)
+                    end
+                    if p:IsA("MeshPart") then
+                        if CONFIG.RemoveTextures then p.TextureID = "" end
+                        p.MaterialVariant = ""
+                    end
+                    CLAY.MaterialAppliedCount = CLAY.MaterialAppliedCount + 1
+                end)
+            end
         end
     end
+
+    matLastFlush = os.clock()
+
     if matHead > 1000 then
         local nq = {}
         for i = matHead, matTail do nq[#nq+1] = matQueue[i] end
@@ -982,7 +1012,7 @@ local function touch(inst)
     if inst.Name:sub(1,5) == "CLAY_" then return end
     if CLAY.Processed[inst] then return end
     CLAY.Processed[inst] = true
-    if isProtected(inst) then return end
+    if isProtected(inst) and not CONFIG.ClayMapToo then return end
     if isLocalChar(inst) then return end
 
     if CONFIG.RemoveEffects and (inst:IsA("ParticleEmitter") or inst:IsA("Trail")
@@ -1241,7 +1271,7 @@ local function makeHUD()
     t.TextColor3 = Color3.fromRGB(255,236,210)
     t.Font, t.TextSize = Enum.Font.GothamBold, 12
     t.TextXAlignment = Enum.TextXAlignment.Left
-    t.Text = string.format("🎨 CLAY v5.3.1 FINAL | %d", CONFIG.MaxFPS)
+    t.Text = string.format("🎨 CLAY v5.3.2 | %d", CONFIG.MaxFPS)
     t.Parent = f
     local ln = Instance.new("TextLabel")
     ln.Size, ln.Position = UDim2.new(1,-12,0,22), UDim2.new(0,6,0,18)
@@ -1269,13 +1299,13 @@ end
 -- ============================================================
 -- 🚀 RUN
 -- ============================================================
-initProtected()          -- ★ ต้องมาก่อนเสมอ
-removeUnneededObjects()  -- ★ หลัง protected
+initProtected()
+removeUnneededObjects()
 applyFFlags()
 applyQualityAndFPS()
 applyNetworkTweaks()
 applyLighting()
-removeAllFog()           -- ★ หลัง applyLighting
+removeAllFog()
 fixTerrain()
 
 if CONFIG.ReduceCoreGui then
@@ -1294,7 +1324,7 @@ CLAY:TrackConn(RunService.RenderStepped:Connect(updateCamMotion))
 
 if CONFIG.ShowHUD then pcall(makeHUD) end
 if CONFIG.ShowToast then
-    CLAY:Notify("🔄 กำลังโหลด CLAY-FPS v5.3.1 FINAL...", {
+    CLAY:Notify("🔄 กำลังโหลด CLAY-FPS v5.3.2...", {
         color = Color3.fromRGB(255,220,150), duration = 3 })
 end
 
@@ -1345,7 +1375,7 @@ CLAY:TrackThread(task.spawn(function()
     end
 end))
 
--- Main drain loop
+-- ★ Main drain loop (ลบ effect/texture/light)
 CLAY:TrackThread(task.spawn(function()
     local wasRotating = false
     while CLAY.Running do
@@ -1360,9 +1390,24 @@ CLAY:TrackThread(task.spawn(function()
                 if pendingSize == 0 then wasRotating = false end
             else
                 drain(adaptiveDrainRate())
-                drainMaterials(CONFIG.MatBatchPerFrame)
                 wasRotating = false
             end
+        end
+        RunService.Heartbeat:Wait()
+    end
+end))
+
+-- ★★★ NEW: drainMaterials loop แยกอิสระ (v5.3.2 FIX) ★★★
+CLAY:TrackThread(task.spawn(function()
+    while CLAY.Running do
+        if not CLAY.Paused then
+            local rate = CONFIG.MatBatchPerFrame
+            if CONFIG.MatAdaptiveMultiplier then
+                if matSize > 1000 then rate = rate * 10
+                elseif matSize > 500 then rate = rate * 6
+                elseif matSize > 200 then rate = rate * 3 end
+            end
+            drainMaterials(rate)
         end
         RunService.Heartbeat:Wait()
     end
@@ -1394,10 +1439,8 @@ if CONFIG.MemoryPruneInterval > 0 then
                 CLAY.HighlightCount = 0
                 if CONFIG.DebugMemory then
                     local mb = math.floor(collectgarbage("count") / 1024)
-                    print(string.format("[CLAY-FPS] 💾 %dMB | Q:%d | Mat:%d | Ball:%d",
-                        mb, pendingSize, matSize, (function()
-                            local n = 0; for _ in pairs(CLAY.BallData) do n = n + 1 end; return n
-                        end)()))
+                    print(string.format("[CLAY-FPS] 💾 %dMB | Q:%d | Mat:%d | Applied:%d",
+                        mb, pendingSize, matSize, CLAY.MaterialAppliedCount))
                 end
             end
         end
@@ -1472,13 +1515,18 @@ end
 
 -- Success toast
 if CONFIG.ShowToast then
-    task.delay(1.2, function()
+    task.delay(1.5, function()
         if not CLAY.Running then return end
-        CLAY:Notify("✅ v5.3.1 FINAL พร้อม! ครบทุกฟีเจอร์", {
+        local applied = CLAY.MaterialAppliedCount
+        local msg = "✅ v5.3.2 พร้อม!"
+        if applied > 0 then
+            msg = string.format("✅ v5.3.2 พร้อม! Clay %d parts", applied)
+        end
+        CLAY:Notify(msg, {
             color = Color3.fromRGB(120,255,140), duration = CONFIG.ToastDuration })
     end)
 end
 
-print(("[CLAY-FPS v5.3.1 FINAL] ✅ ready | ball=%s | fog=%s | unneeded=%s | cap=%d | rerun-safe")
-    :format(tostring(CONFIG.BallSmoothing), tostring(CONFIG.RemoveAllFog),
-        tostring(CONFIG.RemoveUnneededObjects), CONFIG.MaxFPS))
+print(("[CLAY-FPS v5.3.2 FINAL] ✅ ready | clay=%s | claymap=%s | ball=%s | fog=%s | cap=%d | rerun-safe")
+    :format(tostring(CONFIG.ClayLook), tostring(CONFIG.ClayMapToo),
+        tostring(CONFIG.BallSmoothing), tostring(CONFIG.RemoveAllFog), CONFIG.MaxFPS))
