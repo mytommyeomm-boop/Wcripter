@@ -1,411 +1,1484 @@
 --[[
-    ⚽ AUTO DRIBBLE (Executor Version)
-    รองรับ: Delta, Fluxus, Hydrogen, Codex, Arceus X, Wave
-    วิธีใช้: คัดลอกทั้งหมด → วางใน executor → Execute
-    ปุ่มจะโผล่มุมขวาล่างของจอ
+    ╔══════════════════════════════════════════════════════════════╗
+    ║  🎨 CLAY-FPS v5.3.1 FINAL — MOBILE EDITION                   ║
+    ║                                                              ║
+    ║  ✓ Auto-Reload (rerun-safe)                                  ║
+    ║  ✓ Clay Look + FPS Boost                                     ║
+    ║  ✓ Low Ping + 120 FPS                                        ║
+    ║  ✓ Smart HUD (FPS + Ping + Ball status)                      ║
+    ║  ✓ Toast Notification                                        ║
+    ║  ✓ Long-Session Stable                                       ║
+    ║  ✓ Camera Flick Fix (motion gate)                            ║
+    ║  ✓ Safe Mode (Protected Paths + Animation Pause)             ║
+    ║  ✓ Ball Smoother (proxy + interpolation + extrapolation)     ║
+    ║  ✓ Hitbox Sync (ping compensation)                           ║
+    ║  ✓ Fog Remover (classic + atmosphere + sky)                  ║
+    ║  ✓ Unneeded Objects Remover                                  ║
+    ║  ✓ Restore System (material/light/sound/animation)           ║
+    ║                                                              ║
+    ║  MOBILE-ONLY | Client-side | Rerun-safe                      ║
+    ╚══════════════════════════════════════════════════════════════╝
 ]]
 
-local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
+-- ============================================================
+-- 🔄 AUTO-RELOAD (rerun-safe)
+-- ============================================================
+local GENV = (typeof(getgenv) == "function") and getgenv() or _G
+if type(GENV.ClayFPS) == "table" and type(GENV.ClayFPS.Cleanup) == "function" then
+    pcall(function() GENV.ClayFPS:Cleanup() end)
+    print("[CLAY-FPS] 🧹 ลบ instance เก่าแล้ว")
+end
+
+-- ============================================================
+-- 📦 SERVICES
+-- ============================================================
+local Players      = game:GetService("Players")
+local Lighting     = game:GetService("Lighting")
+local Workspace    = game:GetService("Workspace")
+local UIS          = game:GetService("UserInputService")
+local RunService   = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local Stats        = game:GetService("Stats")
+local StarterGui   = game:GetService("StarterGui")
+local LP           = Players.LocalPlayer
 
-local LP = Players.LocalPlayer
+-- ============================================================
+-- ⚙️ CONFIG
+-- ============================================================
+local CONFIG = {
+    -- ★★★ Protection ★★★
+    ProtectedPaths = {
+        "Workspace.map",
+        "Workspace.leaderboard",
+        "Workspace.characters",
+        "Workspace.gks",
+        "Workspace.overtime",
+    },
+    ProtectLocalCharacter = true,
 
--- ========== ลบ GUI เก่าถ้ามี ==========
-if LP:WaitForChild("PlayerGui"):FindFirstChild("AutoDribbleUI_Exec") then
-    LP.PlayerGui.AutoDribbleUI_Exec:Destroy()
+    -- Clay Look
+    ClayLook = true,
+    ClayGrade = true,
+    MuteColors = false,
+    CacheMaterialForRestore = true,
+
+    -- Cleanup passes
+    RemoveTextures = true,
+    RemoveEffects = true,
+    RemoveLights = true,
+    RemoveHighlights = true,
+    RemoveAccessories = false,
+    Remove3DGui = false,
+    RemoveShadows = true,
+    RemoveAtmosphere = true,
+    RemoveClouds = true,
+    RemoveDepthOfField = true,
+    RemoveSunRays = true,
+    KillWater = true,
+    KillViewportGui = true,
+
+    -- ★★★ Fog Remover ★★★
+    RemoveAllFog = true,
+
+    -- ★★★ Unneeded Objects Remover ★★★
+    RemoveUnneededObjects = true,
+    UnneededObjectPaths = {
+        "Workspace.Effects",
+        "Workspace.nightsdevs",
+        "Workspace.Marbles",
+        "Workspace.MarbleFx",
+        "Workspace.cs2_visuals",
+        "Workspace.temp",
+        "Workspace.Terrain.TempVFX",
+        "Workspace.Terrain.AnimationRequesterTemperaryFolderForStuff5077795305",
+        -- เปิด comment ถ้าต้องการ boost เพิ่ม (แลกกับความสวย)
+        -- "Workspace.map.EmotePreviewArea",
+        -- "Workspace.map.something",
+        -- "Workspace.map.map.Billboards",
+        -- "Workspace.map.lobby.NewVersion.Decorations",
+        -- "Workspace.map.lobby.thanksgivingquest",
+        -- "Workspace.map.lobby.subscriptions",
+        -- "Workspace.map.lobby.donlorenzo",
+        -- "Workspace.map.lobby.britishaiku",
+        -- "Workspace.map.lobby.group",
+        -- "Workspace.map.lobby.hiori",
+        -- "Workspace.map.lobby.quest",
+        -- "Workspace.map.lobby.sidequest",
+    },
+
+    -- Character / Sound
+    FreezeFarAnimators = true,
+    FreezeAnimationMethod = "Pause",  -- "Pause" | "Destroy" | "None"
+    FreezeDistance = 60,
+    UnfreezeDistance = 30,
+    CleanFarHumanoids = true,
+    MuteWorkspaceSFX = true,
+    SoundMuteMode = "Mute",           -- "Mute" | "Destroy"
+    MuteSFX = false,
+
+    -- Lighting
+    AggressiveLight = true,
+    ClockTime = 14,
+
+    -- Ping
+    LowPingMode = true,
+    OutgoingRate = 40,
+    StreamingRadius = 512,
+    EnablePauseMode = true,
+    MorePingFFlags = true,
+
+    -- FPS
+    MaxFPS = 60,
+    UncapFPS = false,
+    DisplayMultiplier = 1,
+    QualityLevel = 1,
+
+    -- Hitbox
+    EnableHitbox = true,
+    HitboxAmount = 2.5,
+    BallHighlight = true,
+    PlayerHighlight = false,
+    MaxHighlights = 40,
+
+    -- ★★★ Ball Smoother ★★★
+    BallSmoothing = true,
+    BallPredictionMode = "Lead",       -- "Lead" | "Lag" | "Off"
+    BallCompensatePing = true,
+    BallBaseDelay = 0.03,
+    BallNearDelay = 0.01,
+    BallFarDelay = 0.06,
+    BallNearDistance = 15,
+    BallFarDistance = 60,
+    BallMaxExtrapolate = 0.12,
+    BallMaxDelay = 0.10,
+    BallVelocityEMA = 0.35,
+    BallShotSpeedThreshold = 80,
+    BallShotDelayReduction = 0.4,
+    HitboxSmoothFollow = true,
+
+    -- HUD / Notify
+    ShowToast = true,
+    ToastDuration = 5,
+    ShowHUD = true,
+    ShowPingInHUD = true,
+    ShowBallStatus = true,
+    ReduceCoreGui = false,
+
+    -- Loops
+    YieldEvery = 200,
+    PeriodicRescan = 90,
+    BaseDrainPerFrame = 40,
+    MaxQueueSize = 1500,
+    MemoryPruneInterval = 120,
+    PauseOnBlur = true,
+
+    -- Camera Gate
+    CameraGateEnabled = true,
+    CamRotThreshold = 0.05,
+    CamPosThreshold = 1.5,
+    CamStableTime = 0.15,
+    CamDrainDuringMotion = 0,
+    CamMaterialDuringMotion = 0,
+    CamBurstAfter = 80,
+    MatBatchPerFrame = 4,
+
+    -- Auto-Aggressive
+    AutoAggressive = false,
+    AggroAfter = 8,
+    AggroFPSThreshold = 30,
+    AggroPingThreshold = 200,
+    FrameTimeAggroThreshold = 0.033,
+
+    -- Debug
+    DebugMemory = false,
+    DebugMotion = false,
+    DebugBall = false,
+}
+-- ============================================================
+
+-- ============================================================
+-- 🧠 STATE
+-- ============================================================
+local CLAY = {
+    Connections = {},
+    Threads = {},
+    Instances = {},
+    Processed = setmetatable({}, {__mode = "k"}),
+    Hitboxed = setmetatable({}, {__mode = "k"}),
+    HighlightCount = 0,
+    Running = true,
+    Paused = false,
+    Version = 5.31,
+    Stats = { fps = 0, ping = 0, frameTime = 0 },
+    Aggressive = false,
+    Dirty = false,
+    FrozenChars = setmetatable({}, {__mode = "k"}),
+    OriginalMaterial = setmetatable({}, {__mode = "k"}),
+    OriginalTexture = setmetatable({}, {__mode = "k"}),
+    OriginalSound = setmetatable({}, {__mode = "k"}),
+    HiddenLights = setmetatable({}, {__mode = "k"}),
+    BallData = {},
+}
+GENV.ClayFPS = CLAY
+
+function CLAY:TrackConn(c)   table.insert(self.Connections, c); return c end
+function CLAY:TrackThread(t) table.insert(self.Threads, t);     return t end
+function CLAY:TrackInst(i)   table.insert(self.Instances, i);   return i end
+
+function CLAY:Cleanup()
+    self.Running = false
+    for _, c in ipairs(self.Connections) do pcall(function() c:Disconnect() end) end
+    for _, t in ipairs(self.Threads)     do pcall(function() task.cancel(t) end) end
+    for _, i in ipairs(self.Instances)   do pcall(function() if i and i.Parent then i:Destroy() end end) end
+    for _, d in pairs(self.BallData) do
+        if d.proxy then pcall(function() d.proxy:Destroy() end) end
+        if d.realBall then pcall(function() d.realBall.LocalTransparencyModifier = 0 end) end
+    end
+    self.BallData = {}
+    self.Connections, self.Threads, self.Instances = {}, {}, {}
+    self.Processed = setmetatable({}, {__mode = "k"})
+    self.Hitboxed = setmetatable({}, {__mode = "k"})
+    self.FrozenChars = setmetatable({}, {__mode = "k"})
+    self.HighlightCount = 0
 end
 
--- ========== สร้าง GUI ==========
-local gui = Instance.new("ScreenGui")
-gui.Name = "AutoDribbleUI_Exec"
-gui.ResetOnSpawn = false
-gui.IgnoreGuiInset = true
-gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-gui.DisplayOrder = 999
-gui.Parent = LP:WaitForChild("PlayerGui")
-
--- ========== ปุ่มหลัก (ลากได้) ==========
-local btn = Instance.new("TextButton")
-btn.Name = "MainBtn"
-btn.Size = UDim2.new(0, 85, 0, 85)
-btn.Position = UDim2.new(1, -105, 1, -190)
-btn.BackgroundColor3 = Color3.fromRGB(40, 200, 80)
-btn.BackgroundTransparency = 0.1
-btn.Text = "⚽\nAUTO"
-btn.TextColor3 = Color3.new(1, 1, 1)
-btn.TextScaled = true
-btn.Font = Enum.Font.GothamBold
-btn.BorderSizePixel = 0
-btn.AutoButtonColor = false
-btn.Active = false
-btn.Parent = gui
-
-Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
-local stroke = Instance.new("UIStroke", btn)
-stroke.Color = Color3.fromRGB(255, 255, 255)
-stroke.Thickness = 2
-stroke.Transparency = 0.3
-
--- ========== ปุ่มตั้งค่า ==========
-local settingsBtn = Instance.new("TextButton")
-settingsBtn.Size = UDim2.new(0, 42, 0, 42)
-settingsBtn.Position = UDim2.new(1, -62, 1, -245)
-settingsBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
-settingsBtn.Text = "⚙"
-settingsBtn.TextScaled = true
-settingsBtn.Font = Enum.Font.GothamBold
-settingsBtn.TextColor3 = Color3.new(1, 1, 1)
-settingsBtn.BorderSizePixel = 0
-settingsBtn.Parent = gui
-Instance.new("UICorner", settingsBtn).CornerRadius = UDim.new(1, 0)
-
--- ========== Panel ตั้งค่า ==========
-local panel = Instance.new("Frame")
-panel.Size = UDim2.new(0, 210, 0, 170)
-panel.Position = UDim2.new(1, -225, 1, -430)
-panel.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-panel.Visible = false
-panel.Active = true
-panel.Parent = gui
-Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 12)
-local pStroke = Instance.new("UIStroke", panel)
-pStroke.Color = Color3.fromRGB(80, 200, 255)
-pStroke.Thickness = 1
-pStroke.Transparency = 0.4
-
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 28)
-title.Position = UDim2.new(0, 0, 0, 6)
-title.BackgroundTransparency = 1
-title.Text = "⚙ ตั้งค่า"
-title.TextColor3 = Color3.new(1, 1, 1)
-title.Font = Enum.Font.GothamBold
-title.TextScaled = true
-title.Parent = panel
-
--- Slider ความเร็ว
-local spdLabel = Instance.new("TextLabel")
-spdLabel.Size = UDim2.new(1, -20, 0, 18)
-spdLabel.Position = UDim2.new(0, 10, 0, 36)
-spdLabel.BackgroundTransparency = 1
-spdLabel.Text = "ความเร็ว: 25"
-spdLabel.TextColor3 = Color3.fromRGB(180, 220, 255)
-spdLabel.Font = Enum.Font.Gotham
-spdLabel.TextSize = 13
-spdLabel.TextXAlignment = Enum.TextXAlignment.Left
-spdLabel.Parent = panel
-
-local slider = Instance.new("Frame")
-slider.Size = UDim2.new(1, -20, 0, 16)
-slider.Position = UDim2.new(0, 10, 0, 58)
-slider.BackgroundColor3 = Color3.fromRGB(60, 60, 75)
-slider.Parent = panel
-Instance.new("UICorner", slider).CornerRadius = UDim.new(1, 0)
-
-local fill = Instance.new("Frame")
-fill.Size = UDim2.new(0.5, 0, 1, 0)
-fill.BackgroundColor3 = Color3.fromRGB(80, 200, 255)
-fill.Parent = slider
-Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
-
-local knob = Instance.new("Frame")
-knob.Size = UDim2.new(0, 20, 0, 20)
-knob.Position = UDim2.new(0.5, -10, 0, -2)
-knob.BackgroundColor3 = Color3.new(1, 1, 1)
-knob.Parent = slider
-Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
-
--- Toggle หลบศัตรู
-local dodgeBtn = Instance.new("TextButton")
-dodgeBtn.Size = UDim2.new(1, -20, 0, 28)
-dodgeBtn.Position = UDim2.new(0, 10, 0, 86)
-dodgeBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 120)
-dodgeBtn.Text = "✅ หลบศัตรู: เปิด"
-dodgeBtn.TextColor3 = Color3.new(1, 1, 1)
-dodgeBtn.Font = Enum.Font.GothamBold
-dodgeBtn.TextSize = 13
-dodgeBtn.Parent = panel
-Instance.new("UICorner", dodgeBtn).CornerRadius = UDim.new(0, 8)
-
--- Toggle เข้าประตู
-local goalBtn = Instance.new("TextButton")
-goalBtn.Size = UDim2.new(1, -20, 0, 28)
-goalBtn.Position = UDim2.new(0, 10, 0, 118)
-goalBtn.BackgroundColor3 = Color3.fromRGB(40, 180, 120)
-goalBtn.Text = "✅ วิ่งเข้าประตู: เปิด"
-goalBtn.TextColor3 = Color3.new(1, 1, 1)
-goalBtn.Font = Enum.Font.GothamBold
-goalBtn.TextSize = 13
-goalBtn.Parent = panel
-Instance.new("UICorner", goalBtn).CornerRadius = UDim.new(0, 8)
-
--- ========== State ==========
-local isActive = false
-local moveSpeed = 25
-local doDodge = true
-local doGoal = true
-local connection
-local lastPos = Vector3.zero
-
--- ========== ฟังก์ชันหา Goal ==========
-local function findGoal()
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") then
-            local n = obj.Name:lower()
-            if n:find("goal") or n:find("net") or n:find("post") then
-                if not obj:IsDescendantOf(LP.Character or game) then
-                    return obj
+-- ============================================================
+-- ♻️ RESTORE SYSTEM
+-- ============================================================
+function CLAY:Restore()
+    print("[CLAY-FPS] ♻️ คืนค่าสภาพเดิม...")
+    local restored = 0
+    for part, orig in pairs(self.OriginalMaterial) do
+        if part and part.Parent then
+            pcall(function()
+                part.Material = orig.Material
+                part.Reflectance = orig.Reflectance
+                part.CastShadow = orig.CastShadow
+                part.Color = orig.Color
+                if orig.TextureID and part:IsA("MeshPart") then
+                    part.TextureID = orig.TextureID
                 end
+            end)
+            restored = restored + 1
+        end
+    end
+    self.OriginalMaterial = setmetatable({}, {__mode = "k"})
+    for snd, vol in pairs(self.OriginalSound) do
+        if snd and snd.Parent then
+            pcall(function() snd.Volume = vol end)
+            restored = restored + 1
+        end
+    end
+    self.OriginalSound = setmetatable({}, {__mode = "k"})
+    for light in pairs(self.HiddenLights) do
+        if light and light.Parent then
+            pcall(function() light.Enabled = true end)
+            restored = restored + 1
+        end
+    end
+    self.HiddenLights = setmetatable({}, {__mode = "k"})
+    for char, rec in pairs(self.FrozenChars) do
+        if char and char.Parent and type(rec) == "table" then
+            pcall(function()
+                for _, track in ipairs(rec.tracks or {}) do
+                    pcall(function() track:AdjustSpeed(1) end)
+                end
+                local hum = char:FindFirstChildOfClass("Humanoid")
+                if hum then
+                    hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Viewer
+                end
+            end)
+            restored = restored + 1
+        end
+    end
+    self.FrozenChars = setmetatable({}, {__mode = "k"})
+    print(("[CLAY-FPS] ♻️ คืน %d รายการ"):format(restored))
+    if CONFIG.ShowToast then
+        self:Notify(("♻️ คืนสภาพเดิม %d รายการ"):format(restored), {
+            color = Color3.fromRGB(120,200,255), duration = 5 })
+    end
+end
+
+-- ============================================================
+-- 🛡️ PROTECTION
+-- ============================================================
+local protectedRoots = {}
+
+local function initProtected()
+    for _, path in ipairs(CONFIG.ProtectedPaths) do
+        local ok, obj = pcall(function()
+            local parts = {}
+            for seg in path:gmatch("[^%.]+") do parts[#parts+1] = seg end
+            local cur = game
+            for _, p in ipairs(parts) do cur = cur[p] end
+            return cur
+        end)
+        if ok and obj then
+            protectedRoots[obj] = true
+            print("[CLAY-FPS] 🛡️ ป้องกัน: " .. path)
+        end
+    end
+end
+
+local function isProtected(inst)
+    if not inst then return false end
+    local cur = inst
+    while cur do
+        if protectedRoots[cur] then return true end
+        cur = cur.Parent
+    end
+    return false
+end
+
+local function isLocalChar(inst)
+    if not CONFIG.ProtectLocalCharacter then return false end
+    local char = LP.Character
+    if not char then return false end
+    local cur = inst
+    while cur do
+        if cur == char then return true end
+        cur = cur.Parent
+    end
+    return false
+end
+
+-- ============================================================
+-- 🎯 BALL SMOOTHER
+-- ============================================================
+local function isBall(name)
+    name = name:lower()
+    return name:find("ball") or name:find("soccer") or name:find("football")
+end
+
+local function createBallProxy(realBall)
+    local p = Instance.new("Part")
+    p.Name = "CLAY_BALLPROXY"
+    p.Size = realBall.Size
+    p.Color = realBall.Color
+    p.Material = Enum.Material.SmoothPlastic
+    p.Transparency = realBall.Transparency
+    p.CanCollide = false
+    p.CanTouch = false
+    p.CanQuery = false
+    p.Anchored = true
+    p.CastShadow = false
+    p.CFrame = realBall.CFrame
+    p.Parent = Workspace
+    return p
+end
+
+local function initBall(realBall)
+    if CLAY.BallData[realBall] then return end
+    if not CONFIG.BallSmoothing then
+        if CONFIG.BallHighlight then
+            local hl = Instance.new("Highlight")
+            hl.Name = "CLAY_HL"
+            hl.FillColor = Color3.fromRGB(255,255,80)
+            hl.FillTransparency = 0.75
+            hl.OutlineColor = Color3.fromRGB(255,255,80)
+            hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            hl.Adornee = realBall
+            hl.Parent = realBall
+        end
+        if CONFIG.EnableHitbox and not realBall:FindFirstChild("CLAY_HB") then
+            local wrap = Instance.new("Part")
+            wrap.Name = "CLAY_HB"
+            wrap.Size = realBall.Size + Vector3.new(CONFIG.HitboxAmount, CONFIG.HitboxAmount, CONFIG.HitboxAmount)
+            wrap.Transparency = 1
+            wrap.CanCollide = false; wrap.CanTouch = true; wrap.CanQuery = false
+            wrap.Anchored = false; wrap.Massless = true
+            wrap.CFrame = realBall.CFrame
+            local weld = Instance.new("WeldConstraint")
+            weld.Part0, weld.Part1 = wrap, realBall
+            weld.Parent = wrap
+            wrap.Parent = realBall
+        end
+        return
+    end
+
+    local proxy = createBallProxy(realBall)
+    realBall.LocalTransparencyModifier = 1
+
+    if CONFIG.BallHighlight then
+        local hl = Instance.new("Highlight")
+        hl.Name = "CLAY_HL"
+        hl.FillColor = Color3.fromRGB(255,255,80)
+        hl.FillTransparency = 0.75
+        hl.OutlineColor = Color3.fromRGB(255,255,80)
+        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        hl.Adornee = proxy
+        hl.Parent = proxy
+    end
+
+    local now = os.clock()
+    CLAY.BallData[realBall] = {
+        proxy = proxy,
+        history = { { t = now, pos = realBall.CFrame.Position, rot = realBall.CFrame.Rotation } },
+        smoothVel = Vector3.new(),
+        lastSample = now,
+        hitbox = nil,
+        isShot = false,
+    }
+
+    if CONFIG.EnableHitbox and CONFIG.HitboxSmoothFollow and not proxy:FindFirstChild("CLAY_HB") then
+        local wrap = Instance.new("Part")
+        wrap.Name = "CLAY_HB"
+        wrap.Size = proxy.Size + Vector3.new(CONFIG.HitboxAmount, CONFIG.HitboxAmount, CONFIG.HitboxAmount)
+        wrap.Transparency = 1
+        wrap.CanCollide = false; wrap.CanTouch = true; wrap.CanQuery = false
+        wrap.Anchored = true; wrap.Massless = true
+        wrap.CFrame = proxy.CFrame
+        wrap.Parent = proxy
+        CLAY.BallData[realBall].hitbox = wrap
+    end
+end
+
+local function sampleBall(realBall)
+    local d = CLAY.BallData[realBall]
+    if not d or not realBall.Parent then return end
+    local now = os.clock()
+    local pos = realBall.CFrame.Position
+    local rot = realBall.CFrame.Rotation
+    local last = d.history[#d.history]
+
+    if last then
+        local dt = now - last.t
+        if dt > 0.001 then
+            local instVel = (pos - last.pos) / dt
+            if instVel.Magnitude < 800 then
+                d.smoothVel = d.smoothVel:Lerp(instVel, CONFIG.BallVelocityEMA)
+            else
+                d.smoothVel = Vector3.new()
+                d.history = {}
             end
         end
     end
-    return nil
+
+    table.insert(d.history, { t = now, pos = pos, rot = rot })
+    if #d.history > 15 then table.remove(d.history, 1) end
+    d.lastSample = now
+    d.isShot = d.smoothVel.Magnitude > CONFIG.BallShotSpeedThreshold
 end
 
--- ========== หาศัตรูใกล้สุด ==========
-local function findNearestEnemy(char)
-    local myTeam = LP.Team
-    local myPos = char.HumanoidRootPart.Position
-    local nearest, nearestDist = nil, 22
+local function renderBalls()
+    if not CONFIG.BallSmoothing then return end
+    local now = os.clock()
+    local lpChar = LP.Character
+    local lpPos = lpChar and lpChar.PrimaryPart and lpChar.PrimaryPart.Position
+    local pingLead = CONFIG.BallCompensatePing
+        and (math.max(0, CLAY.Stats.ping) / 2000) or 0
 
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LP and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-            local ok = true
-            if myTeam and plr.Team then
-                if plr.Team == myTeam then ok = false end
-            end
-            if ok then
-                local d = (plr.Character.HumanoidRootPart.Position - myPos).Magnitude
-                if d < nearestDist then
-                    nearestDist = d
-                    nearest = plr.Character.HumanoidRootPart.Position
-                end
+    for realBall, d in pairs(CLAY.BallData) do
+        if not realBall.Parent or not d.proxy or not d.proxy.Parent then
+            if d.proxy then d.proxy:Destroy() end
+            pcall(function() realBall.LocalTransparencyModifier = 0 end)
+            CLAY.BallData[realBall] = nil
+            continue
+        end
+
+        local delay = CONFIG.BallBaseDelay
+        if lpPos then
+            local dist = (realBall.CFrame.Position - lpPos).Magnitude
+            if dist < CONFIG.BallNearDistance then
+                delay = CONFIG.BallNearDelay
+            elseif dist > CONFIG.BallFarDistance then
+                delay = CONFIG.BallFarDelay
+            else
+                local t = (dist - CONFIG.BallNearDistance) / (CONFIG.BallFarDistance - CONFIG.BallNearDistance)
+                delay = CONFIG.BallNearDelay * (1 - t) + CONFIG.BallFarDelay * t
             end
         end
-    end
-    return nearest
-end
+        if d.isShot then delay = delay * CONFIG.BallShotDelayReduction end
 
--- ========== หาบอล ==========
-local function findBall()
-    local names = {"ball", "soccerball", "football", "soccer ball"}
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("BasePart") then
-            local n = obj.Name:lower()
-            for _, bn in ipairs(names) do
-                if n == bn or n:find(bn) then
-                    return obj
+        local renderTime
+        if CONFIG.BallPredictionMode == "Lead" then
+            renderTime = now + pingLead - delay
+        elseif CONFIG.BallPredictionMode == "Lag" then
+            renderTime = now - delay - pingLead
+        else
+            renderTime = now
+        end
+
+        local minT = now - CONFIG.BallMaxDelay
+        local maxT = now + CONFIG.BallMaxExtrapolate + pingLead
+        if renderTime < minT then renderTime = minT end
+        if renderTime > maxT then renderTime = maxT end
+
+        local h = d.history
+        if #h < 2 then
+            d.proxy.CFrame = realBall.CFrame
+        else
+            local prev, nxt = h[1], h[#h]
+            local found = false
+            for i = 1, #h - 1 do
+                if h[i].t <= renderTime and h[i+1].t >= renderTime then
+                    prev, nxt = h[i], h[i+1]
+                    found = true
+                    break
                 end
             end
+
+            local finalCF
+            if found then
+                local span = nxt.t - prev.t
+                local alpha = span > 0.0001 and (renderTime - prev.t) / span or 0
+                if alpha < 0 then alpha = 0 elseif alpha > 1 then alpha = 1 end
+                local pos = prev.pos:Lerp(nxt.pos, alpha)
+                local rot = prev.rot:Lerp(nxt.rot, alpha)
+                finalCF = CFrame.new(pos) * rot
+            else
+                local dt = renderTime - h[#h].t
+                if dt < 0 then dt = 0 end
+                if dt > CONFIG.BallMaxExtrapolate then dt = CONFIG.BallMaxExtrapolate end
+                local pos = h[#h].pos + d.smoothVel * dt
+                finalCF = CFrame.new(pos) * h[#h].rot
+            end
+            d.proxy.CFrame = finalCF
+        end
+
+        if d.hitbox and d.hitbox.Parent then
+            d.hitbox.CFrame = d.proxy.CFrame
         end
     end
-    return nil
 end
 
--- ========== คำนวณทิศทาง ==========
-local function getDirection(char)
-    local hrp = char.HumanoidRootPart
-    local goal = doGoal and findGoal()
-    if goal then
-        return (goal.Position - hrp.Position).Unit
-    end
-    return hrp.CFrame.LookVector
+-- ============================================================
+-- 👤 CHARACTER OPTIMIZER
+-- ============================================================
+local function getLPChar() return LP.Character end
+
+local function distFromLocal(pos)
+    local c = getLPChar()
+    if not c or not c.PrimaryPart then return 0 end
+    return (pos - c.PrimaryPart.Position).Magnitude
 end
 
--- ========== อัปเดตทิศหลบ ==========
-local function applyDodge(char, dir)
-    if not doDodge then return dir end
-    local enemyPos = findNearestEnemy(char)
-    if not enemyPos then return dir end
-
-    local hrp = char.HumanoidRootPart
-    local toEnemy = (enemyPos - hrp.Position).Unit
-    local right = hrp.CFrame.RightVector
-
-    -- ถ้าศัตรูขวางหน้าอยู่ ให้เบี่ยงข้าง
-    if dir:Dot(toEnemy) > 0.45 then
-        local side = (right:Dot(toEnemy) > 0) and -1 or 1
-        dir = (dir + right * side * 0.9).Unit
-    end
-    return dir
-end
-
--- ========== ขยับบอล (ถ้าเราเป็นเจ้าของ) ==========
-local function tryMoveBall(char)
-    local ball = findBall()
-    if not ball then return end
-    -- เช็ค network ownership
-    local ok, owner = pcall(function() return ball:GetNetworkOwner() end)
-    if ok and owner == LP then
-        local hrp = char.HumanoidRootPart
-        local targetPos = hrp.Position + hrp.CFrame.LookVector * 2.2 + Vector3.new(0, 0.8, 0)
-        -- interpolate นุ่มๆ
-        local newCF = CFrame.new(targetPos) * CFrame.Angles(0, math.atan2(hrp.CFrame.LookVector.X, hrp.CFrame.LookVector.Z), 0)
-        ball.CFrame = ball.CFrame:Lerp(newCF, 0.35)
-    end
-end
-
--- ========== ลูปหลัก ==========
-local function start()
-    local char = LP.Character or LP.CharacterAdded:Wait()
-    local hum = char:WaitForChild("Humanoid")
-
-    connection = RunService.Heartbeat:Connect(function()
-        if not isActive then return end
-        local c = LP.Character
-        if not c or not c:FindFirstChild("HumanoidRootPart") then return end
-        local h = c:FindFirstChildOfClass("Humanoid")
-        if not h or h.Health <= 0 then return end
-
-        local dir = getDirection(c)
-        dir = applyDodge(c, dir)
-
-        -- ใช้ Move() เหมือนกด joystick
-        h:Move(dir * (moveSpeed / 16), false)
-
-        -- ขยับบอลถ้าเป็นเจ้าของ
-        tryMoveBall(c)
-    end)
-end
-
-local function stop()
-    isActive = false
-    if connection then
-        connection:Disconnect()
-        connection = nil
-    end
-    local c = LP.Character
-    if c and c:FindFirstChildOfClass("Humanoid") then
-        c.Humanoid:Move(Vector3.zero, false)
-    end
-end
-
--- ========== Toggle State ==========
-local function setState(on)
-    isActive = on
-    if on then
-        btn.BackgroundColor3 = Color3.fromRGB(255, 190, 30)
-        btn.Text = "⚽\nON"
-        stroke.Color = Color3.fromRGB(255, 240, 100)
-        start()
+local function freezeCharAnimations(char)
+    if CLAY.FrozenChars[char] then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    if CONFIG.FreezeAnimationMethod == "None" then return end
+    if CONFIG.FreezeAnimationMethod == "Destroy" then
+        local animator = hum:FindFirstChildOfClass("Animator")
+        if animator then
+            pcall(function()
+                for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+                    pcall(function() track:Stop(0) end)
+                end
+                animator:Destroy()
+            end)
+        end
+        CLAY.FrozenChars[char] = { destroyed = true }
     else
-        btn.BackgroundColor3 = Color3.fromRGB(40, 200, 80)
-        btn.Text = "⚽\nAUTO"
-        stroke.Color = Color3.fromRGB(255, 255, 255)
-        stop()
+        local animator = hum:FindFirstChildOfClass("Animator")
+        if animator then
+            local tracks = {}
+            for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+                pcall(function()
+                    track:AdjustSpeed(0)
+                    tracks[#tracks+1] = track
+                end)
+            end
+            CLAY.FrozenChars[char] = { tracks = tracks }
+        end
+        pcall(function() hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None end)
     end
 end
 
--- ========== ปุ่มกด (รองรับ Touch + Mouse) ==========
-btn.MouseButton1Click:Connect(function() setState(not isActive) end)
-btn.TouchTap:Connect(function() setState(not isActive) end)
-
--- ========== ลากปุ่ม (Drag) ==========
-local function makeDraggable(frame, handle)
-    local dragging = false
-    local dragStart, startPos
-
-    handle.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch
-        or input.UserInputType == Enum.UserInputType.MouseButton1 then
-            -- เช็คว่าเป็นการแตะสั้น ไม่ใช่ลาก
-            dragging = true
-            dragStart = input.Position
-            startPos = frame.Position
+local function unfreezeCharAnimations(char)
+    local rec = CLAY.FrozenChars[char]
+    if not rec then return end
+    if type(rec) == "table" and rec.tracks then
+        for _, track in ipairs(rec.tracks) do
+            pcall(function() track:AdjustSpeed(1) end)
         end
-    end)
+    end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        pcall(function() hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Viewer end)
+    end
+    CLAY.FrozenChars[char] = nil
+end
 
-    UserInputService.InputChanged:Connect(function(input)
-        if not dragging then return end
-        if input.UserInputType == Enum.UserInputType.Touch
-        or input.UserInputType == Enum.UserInputType.MouseMovement then
-            local delta = input.Position - dragStart
-            -- ถ้าลากเกิน 10px ถือว่า drag (ไม่ trigger click)
-            if delta.Magnitude > 10 then
-                frame.Position = UDim2.new(
-                    startPos.X.Scale, startPos.X.Offset + delta.X,
-                    startPos.Y.Scale, startPos.Y.Offset + delta.Y
-                )
+local function optimizeCharacter(char)
+    if not char or char == getLPChar() then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    local d = distFromLocal(root.Position)
+    if d > CONFIG.FreezeDistance then
+        if CONFIG.CleanFarHumanoids and not CLAY.FrozenChars[char] then
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum then
+                pcall(function() hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None end)
             end
         end
-    end)
+        if CONFIG.FreezeFarAnimators then freezeCharAnimations(char) end
+    elseif d < CONFIG.UnfreezeDistance and CLAY.FrozenChars[char] then
+        unfreezeCharAnimations(char)
+    end
+end
 
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch
-        or input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
+local function scanCharacters()
+    for _, d in ipairs(Workspace:GetDescendants()) do
+        if d:IsA("Model") and d:FindFirstChildOfClass("Humanoid")
+            and d ~= getLPChar() and not isProtected(d) then
+            optimizeCharacter(d)
+        end
+    end
+end
+
+-- ============================================================
+-- 🔇 SOUND HANDLER
+-- ============================================================
+local function handleSound(s)
+    if not CONFIG.MuteWorkspaceSFX and not CONFIG.MuteSFX then return end
+    if isProtected(s) or isLocalChar(s) then return end
+    if CONFIG.SoundMuteMode == "Destroy" or CONFIG.MuteSFX then
+        pcall(function() s.Volume = 0; s.Playing = false; s:Destroy() end)
+    else
+        if not CLAY.OriginalSound[s] then CLAY.OriginalSound[s] = s.Volume end
+        pcall(function() s.Volume = 0 end)
+    end
+end
+
+local function scanSounds(root)
+    for _, d in ipairs(root:GetDescendants()) do
+        if d:IsA("Sound") then handleSound(d) end
+    end
+end
+
+-- ============================================================
+-- 🎥 CAMERA MOTION TRACKER
+-- ============================================================
+local camMotion = {
+    rotating = false, stableTime = 1,
+    lastLook = Vector3.new(0,0,-1), lastPos = Vector3.new(),
+    velocity = 0, triggered = false,
+}
+
+local function updateCamMotion()
+    local cam = Workspace.CurrentCamera
+    if not cam then return end
+    local look, pos = cam.CFrame.LookVector, cam.CFrame.Position
+    local rotDelta = (look - camMotion.lastLook).Magnitude
+    local posDelta = (pos - camMotion.lastPos).Magnitude
+    if rotDelta > CONFIG.CamRotThreshold or posDelta > CONFIG.CamPosThreshold then
+        camMotion.stableTime = 0
+        camMotion.rotating = true
+        camMotion.velocity = math.max(rotDelta * 60, posDelta * 60)
+        if CONFIG.DebugMotion and not camMotion.triggered then
+            camMotion.triggered = true
+            print(("[CLAY-FPS] 🎥 Motion ON (vel=%.1f)"):format(camMotion.velocity))
+        end
+    else
+        camMotion.stableTime = camMotion.stableTime + (1/60)
+        if camMotion.stableTime >= CONFIG.CamStableTime then
+            camMotion.rotating = false
+            camMotion.velocity = 0
+            camMotion.triggered = false
+        end
+    end
+    camMotion.lastLook = look
+    camMotion.lastPos = pos
+end
+
+local function camIsRotating() return CONFIG.CameraGateEnabled and camMotion.rotating end
+local function camIsStable() return not CONFIG.CameraGateEnabled
+    or (not camMotion.rotating and camMotion.stableTime >= CONFIG.CamStableTime) end
+
+-- ============================================================
+-- 🔔 TOAST
+-- ============================================================
+function CLAY:Notify(text, opts)
+    opts = opts or {}
+    local dur = opts.duration or CONFIG.ToastDuration
+    local color = opts.color or Color3.fromRGB(255,236,210)
+    local pg = LP:FindFirstChild("PlayerGui")
+    if not pg then return end
+    local gui = pg:FindFirstChild("CLAY_NOTIFY")
+    if not gui then
+        gui = Instance.new("ScreenGui")
+        gui.Name, gui.IgnoreGuiInset, gui.ResetOnSpawn, gui.DisplayOrder = "CLAY_NOTIFY", true, false, 10000
+        gui.Parent = pg
+        self:TrackInst(gui)
+    end
+    local f = Instance.new("Frame")
+    f.Size, f.Position = UDim2.new(0,320,0,48), UDim2.new(0.5,-160,0,-90)
+    f.BackgroundColor3, f.BackgroundTransparency = Color3.fromRGB(20,18,16), 0.08
+    f.BorderSizePixel = 0
+    f.Parent = gui
+    Instance.new("UICorner", f).CornerRadius = UDim.new(0,10)
+    local st = Instance.new("UIStroke", f)
+    st.Color, st.Transparency = color, 0.6
+    local lb = Instance.new("TextLabel")
+    lb.Size, lb.Position = UDim2.new(1,-20,1,-8), UDim2.new(0,12,0,4)
+    lb.BackgroundTransparency = 1
+    lb.TextColor3, lb.TextScaled, lb.Font = color, true, Enum.Font.GothamBold
+    lb.Text, lb.TextXAlignment = text, Enum.TextXAlignment.Left
+    lb.Parent = f
+    TweenService:Create(f, TweenInfo.new(0.35,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),
+        {Position = UDim2.new(0.5,-160,0,20)}):Play()
+    task.delay(dur, function()
+        if f and f.Parent then
+            local t = TweenService:Create(f, TweenInfo.new(0.35),
+                {Position = UDim2.new(0.5,-160,0,-90), BackgroundTransparency = 1})
+            t:Play()
+            t.Completed:Wait()
+            if f then f:Destroy() end
         end
     end)
 end
 
-makeDraggable(btn, btn)
-makeDraggable(panel, title) -- ลาก panel ได้
-
--- ========== ตั้งค่าปุ่ม ==========
-settingsBtn.MouseButton1Click:Connect(function() panel.Visible = not panel.Visible end)
-settingsBtn.TouchTap:Connect(function() panel.Visible = not panel.Visible end)
-
--- Slider drag
-local sliderDrag = false
-slider.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch
-    or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        sliderDrag = true
+-- ============================================================
+-- ⚡ FFLAGS / QUALITY / NETWORK
+-- ============================================================
+local function applyFFlags()
+    if type(setfflag) ~= "function" then return end
+    if CONFIG.UncapFPS then
+        pcall(setfflag, "DFIntTaskSchedulerTargetFps", "240")
+        pcall(setfflag, "FFlagGameBasicSettingsFramerateCap", "false")
     end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if not sliderDrag then return end
-    if input.UserInputType == Enum.UserInputType.Touch
-    or input.UserInputType == Enum.UserInputType.MouseMovement then
-        local rel = input.Position.X - slider.AbsolutePosition.X
-        local pct = math.clamp(rel / slider.AbsoluteSize.X, 0, 1)
-        fill.Size = UDim2.new(pct, 0, 1, 0)
-        knob.Position = UDim2.new(pct, -10, 0, -2)
-        moveSpeed = math.floor(12 + pct * 38) -- 12–50
-        spdLabel.Text = "ความเร็ว: " .. moveSpeed
+    if CONFIG.QualityLevel <= 1 then
+        pcall(setfflag, "DFIntMaxFrameBufferSize", "4")
+        pcall(setfflag, "FFlagDisablePostFx", "true")
     end
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch
-    or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        sliderDrag = false
+    if CONFIG.MorePingFFlags then
+        pcall(setfflag, "DFIntS2PhysicsSenderRate", "5")
+        pcall(setfflag, "DFIntS2PhysicsReceiverRate", "5")
+        pcall(setfflag, "DFIntMaxDataPacketsPerSecond", "30")
+        pcall(setfflag, "FFlagOptimizeNetworkSendData", "true")
     end
-end)
+end
 
--- Toggle dodge
-dodgeBtn.MouseButton1Click:Connect(function()
-    doDodge = not doDodge
-    dodgeBtn.Text = (doDodge and "✅" or "❌") .. " หลบศัตรู: " .. (doDodge and "เปิด" or "ปิด")
-    dodgeBtn.BackgroundColor3 = doDodge and Color3.fromRGB(40,180,120) or Color3.fromRGB(180,60,60)
-end)
-dodgeBtn.TouchTap:Connect(function()
-    doDodge = not doDodge
-    dodgeBtn.Text = (doDodge and "✅" or "❌") .. " หลบศัตรู: " .. (doDodge and "เปิด" or "ปิด")
-    dodgeBtn.BackgroundColor3 = doDodge and Color3.fromRGB(40,180,120) or Color3.fromRGB(180,60,60)
-end)
-
--- Toggle goal
-goalBtn.MouseButton1Click:Connect(function()
-    doGoal = not doGoal
-    goalBtn.Text = (doGoal and "✅" or "❌") .. " วิ่งเข้าประตู: " .. (doGoal and "เปิด" or "ปิด")
-    goalBtn.BackgroundColor3 = doGoal and Color3.fromRGB(40,180,120) or Color3.fromRGB(180,60,60)
-end)
-goalBtn.TouchTap:Connect(function()
-    doGoal = not doGoal
-    goalBtn.Text = (doGoal and "✅" or "❌") .. " วิ่งเข้าประตู: " .. (doGoal and "เปิด" or "ปิด")
-    goalBtn.BackgroundColor3 = doGoal and Color3.fromRGB(40,180,120) or Color3.fromRGB(180,60,60)
-end)
-
--- ========== Reset เมื่อเกิดใหม่ ==========
-LP.CharacterAdded:Connect(function()
-    if isActive then
-        stop()
-        setState(false)
+local function applyQualityAndFPS()
+    pcall(function()
+        UserSettings():GetService("UserGameSettings").SavedQualityLevel =
+            Enum.SavedQualitySetting.QualityLevel1
+    end)
+    local ok, s = pcall(function() return settings() end)
+    if ok and s then
+        pcall(function() s.Rendering.QualityLevel = CONFIG.QualityLevel end)
+        pcall(function() s.Rendering.MeshDetailLevel = 1 end)
     end
-end)
+    if CONFIG.MaxFPS > 0 and type(setfpscap) == "function" then
+        pcall(setfpscap, CONFIG.MaxFPS)
+    end
+end
 
-print("[Auto Dribble] โหลดสำเร็จ! กดปุ่ม ⚽ มุมขวาล่างเพื่อเปิด")
+local function applyNetworkTweaks()
+    if not CONFIG.LowPingMode then return end
+    local ok, s = pcall(function() return settings() end)
+    if not ok or not s then return end
+    pcall(function() s.Network.IncomingReplicationLag = 0 end)
+    pcall(function() s.Network.PreferredOutgoingReplicationRate = CONFIG.OutgoingRate end)
+    if Workspace.StreamingEnabled then
+        pcall(function() Workspace.StreamingTargetRadius = CONFIG.StreamingRadius end)
+        if CONFIG.EnablePauseMode then
+            pcall(function() Workspace.StreamingPauseMode = Enum.StreamingPauseMode.ClientPhysicsPause end)
+        end
+    end
+end
+
+-- ============================================================
+-- 💡 LIGHTING
+-- ============================================================
+local function applyLighting()
+    pcall(function()
+        Lighting.GlobalShadows = not CONFIG.RemoveShadows
+        Lighting.ShadowSoftness = 0
+        Lighting.Brightness = CONFIG.AggressiveLight and 2.5 or 2
+        Lighting.Ambient = Color3.fromRGB(100,98,102)
+        Lighting.OutdoorAmbient = Color3.fromRGB(120,118,122)
+        Lighting.EnvironmentDiffuseScale = 0
+        Lighting.EnvironmentSpecularScale = 0
+        Lighting.ExposureCompensation = -0.1
+        Lighting.ClockTime = CONFIG.ClockTime
+        if CONFIG.RemoveAllFog then
+            Lighting.FogStart = 0
+            Lighting.FogEnd = 100000
+            Lighting.FogColor = Color3.fromRGB(255, 255, 255)
+        end
+    end)
+    for _, obj in ipairs(Lighting:GetDescendants()) do
+        if obj.Name == "CLAY_GRADE" then
+            -- keep
+        elseif obj:IsA("PostEffect") then
+            pcall(function() obj.Enabled=false; obj:Destroy() end)
+        elseif (CONFIG.RemoveAtmosphere and obj:IsA("Atmosphere"))
+            or (CONFIG.RemoveClouds and obj:IsA("Clouds")) then
+            pcall(function() obj:Destroy() end)
+        elseif obj:IsA("Sky") then
+            pcall(function() obj.CelestialBodiesShown=false; obj.StarCount=0 end)
+        end
+    end
+    if CONFIG.ClayGrade then
+        local cc = Lighting:FindFirstChild("CLAY_GRADE")
+        if not cc then
+            cc = Instance.new("ColorCorrectionEffect")
+            cc.Name = "CLAY_GRADE"
+            CLAY:TrackInst(cc)
+        end
+        cc.Parent, cc.Saturation, cc.Contrast = Lighting, -0.25, 0.10
+        cc.Brightness, cc.TintColor = 0.03, Color3.fromRGB(255,248,240)
+    end
+end
+
+-- ============================================================
+-- 🌫️ FOG REMOVER
+-- ============================================================
+local function removeAllFog()
+    if not CONFIG.RemoveAllFog then return end
+    pcall(function()
+        Lighting.FogStart = 0
+        Lighting.FogEnd = 100000
+        Lighting.FogColor = Color3.fromRGB(255, 255, 255)
+    end)
+    for _, obj in ipairs(Lighting:GetChildren()) do
+        if obj:IsA("Atmosphere") or obj:IsA("Clouds") then
+            pcall(function() obj:Destroy() end)
+        elseif obj:IsA("Sky") then
+            pcall(function()
+                obj.SkyboxBk = ""; obj.SkyboxDn = ""; obj.SkyboxFt = ""
+                obj.SkyboxLf = ""; obj.SkyboxRt = ""; obj.SkyboxUp = ""
+                obj.CelestialBodiesShown = false
+                obj.StarCount = 0
+                obj.MoonAngularSize = 0
+                obj.SunAngularSize = 0
+            end)
+        end
+    end
+    for _, obj in ipairs(Lighting:GetChildren()) do
+        if obj.Name ~= "CLAY_GRADE" then
+            if CONFIG.RemoveDepthOfField and obj:IsA("DepthOfFieldEffect") then
+                pcall(function() obj:Destroy() end)
+            elseif CONFIG.RemoveSunRays and obj:IsA("SunRaysEffect") then
+                pcall(function() obj:Destroy() end)
+            elseif obj:IsA("BlurEffect") or obj:IsA("BloomEffect") then
+                pcall(function() obj:Destroy() end)
+            end
+        end
+    end
+    pcall(function()
+        local t = Workspace.Terrain
+        if t then t.Decoration = false end
+    end)
+    print("[CLAY-FPS] 🌫️ ลบหมอกทั้งหมดแล้ว")
+end
+
+-- ============================================================
+-- 🗑️ UNNEEDED OBJECT REMOVER
+-- ============================================================
+local function resolvePath(path)
+    local ok, obj = pcall(function()
+        local parts = {}
+        for seg in path:gmatch("[^%.]+") do parts[#parts+1] = seg end
+        local cur = game
+        for _, p in ipairs(parts) do
+            cur = cur[p]
+            if not cur then return nil end
+        end
+        return cur
+    end)
+    return ok and obj or nil
+end
+
+local function removeUnneededObjects()
+    if not CONFIG.RemoveUnneededObjects then return end
+    local removed, skipped = 0, 0
+    for _, path in ipairs(CONFIG.UnneededObjectPaths) do
+        local obj = resolvePath(path)
+        if obj then
+            if isProtected(obj) then
+                warn(("[CLAY-FPS] ⚠️ ข้าม %s (protected)"):format(path))
+                skipped = skipped + 1
+            else
+                local lpChar = LP.Character
+                local isAncestor = false
+                if lpChar then
+                    local cur = lpChar
+                    while cur do
+                        if cur == obj then isAncestor = true; break end
+                        cur = cur.Parent
+                    end
+                end
+                if isAncestor then
+                    warn(("[CLAY-FPS] ⚠️ ข้าม %s (บรรพบุรุษ)"):format(path))
+                    skipped = skipped + 1
+                else
+                    pcall(function() obj:Destroy() end)
+                    removed = removed + 1
+                    print("[CLAY-FPS] 🗑️ ลบ: " .. path)
+                end
+            end
+        end
+    end
+    print(("[CLAY-FPS] 🗑️ ลบ %d | ข้าม %d"):format(removed, skipped))
+end
+
+-- ============================================================
+-- 🧱 MATERIAL BATCH
+-- ============================================================
+local matQueue, matHead, matTail, matSize = {}, 1, 0, 0
+
+local function queueMaterial(part)
+    if not part or not part.Parent then return end
+    if part:FindFirstChild("CLAY_HB") or part.Name == "CLAY_BALLPROXY" then return end
+    matTail = matTail + 1
+    matQueue[matTail] = part
+    matSize = matSize + 1
+end
+
+local function drainMaterials(maxN)
+    if camIsRotating() then
+        if CONFIG.CamMaterialDuringMotion <= 0 then return end
+        maxN = CONFIG.CamMaterialDuringMotion
+    end
+    if matSize == 0 then return end
+    local n = math.min(matSize, maxN or CONFIG.MatBatchPerFrame)
+    for _ = 1, n do
+        local p = matQueue[matHead]
+        matQueue[matHead] = nil
+        matHead = matHead + 1
+        matSize = matSize - 1
+        if p and p.Parent and not isProtected(p) and not isLocalChar(p)
+            and p.Name ~= "CLAY_BALLPROXY" then
+            pcall(function()
+                if CONFIG.CacheMaterialForRestore and not CLAY.OriginalMaterial[p] then
+                    CLAY.OriginalMaterial[p] = {
+                        Material = p.Material,
+                        Reflectance = p.Reflectance,
+                        CastShadow = p.CastShadow,
+                        Color = p.Color,
+                        TextureID = p:IsA("MeshPart") and p.TextureID or nil,
+                    }
+                end
+                p.Material = Enum.Material.SmoothPlastic
+                p.Reflectance = 0
+                p.CastShadow = false
+                if CONFIG.MuteColors and p.Color then
+                    local c = p.Color
+                    local g = c.R*0.299 + c.G*0.587 + c.B*0.114
+                    p.Color = Color3.new(c.R*0.55+g*0.45, c.G*0.55+g*0.45, c.B*0.55+g*0.45)
+                end
+                if p:IsA("MeshPart") then
+                    if CONFIG.RemoveTextures then p.TextureID = "" end
+                    p.MaterialVariant = ""
+                end
+            end)
+        end
+    end
+    if matHead > 1000 then
+        local nq = {}
+        for i = matHead, matTail do nq[#nq+1] = matQueue[i] end
+        matQueue, matHead, matTail = nq, 1, #nq
+    end
+end
+
+-- ============================================================
+-- 🧱 TOUCH
+-- ============================================================
+local function touch(inst)
+    if not inst or not inst.Parent then return end
+    if inst.Name:sub(1,5) == "CLAY_" then return end
+    if CLAY.Processed[inst] then return end
+    CLAY.Processed[inst] = true
+    if isProtected(inst) then return end
+    if isLocalChar(inst) then return end
+
+    if CONFIG.RemoveEffects and (inst:IsA("ParticleEmitter") or inst:IsA("Trail")
+        or inst:IsA("Beam") or inst:IsA("Smoke")
+        or inst:IsA("Fire") or inst:IsA("Sparkles")) then
+        pcall(function() inst.Enabled=false; inst:Destroy() end)
+        return
+    end
+    if CONFIG.RemoveLights and inst:IsA("Light") then
+        CLAY.HiddenLights[inst] = true
+        pcall(function() inst.Enabled = false end)
+        return
+    end
+    if CONFIG.RemoveHighlights and inst:IsA("Highlight") and inst.Name ~= "CLAY_HL" then
+        pcall(function() inst:Destroy() end)
+        return
+    end
+    if inst:IsA("SelectionBox") or inst:IsA("SelectionSphere") then
+        pcall(function() inst:Destroy() end)
+        return
+    end
+    if CONFIG.KillViewportGui and inst:IsA("ViewportFrame") then
+        pcall(function() inst:Destroy() end)
+        return
+    end
+    if inst:IsA("Sound") then handleSound(inst); return end
+    if CONFIG.RemoveTextures then
+        if inst:IsA("Decal") or inst:IsA("Texture") or inst:IsA("SurfaceAppearance") then
+            pcall(function() inst:Destroy() end)
+            return
+        elseif inst:IsA("SpecialMesh") then
+            pcall(function() inst.TextureId = "" end)
+        end
+    end
+    if CONFIG.Remove3DGui and (inst:IsA("BillboardGui") or inst:IsA("SurfaceGui")) then
+        pcall(function() inst:Destroy() end)
+        return
+    end
+    if CONFIG.ClayLook and inst:IsA("BasePart") and not inst:IsA("Terrain") then
+        if isBall(inst.Name) then initBall(inst); return end
+        queueMaterial(inst)
+    end
+end
+
+-- ============================================================
+-- 🔍 SCAN
+-- ============================================================
+local function scan(root)
+    if not root then return end
+    local stack, count = { root }, 0
+    while #stack > 0 do
+        if camIsRotating() then task.wait(); break end
+        local cur = table.remove(stack)
+        if cur then
+            touch(cur)
+            for _, ch in ipairs(cur:GetChildren()) do stack[#stack+1] = ch end
+            count = count + 1
+            if count % CONFIG.YieldEvery == 0 then
+                task.wait()
+                if not CLAY.Running then return end
+            end
+        end
+    end
+end
+
+local function scanBalls(root)
+    if not root then return end
+    for _, d in ipairs(root:GetDescendants()) do
+        if d:IsA("BasePart") and isBall(d.Name) then initBall(d) end
+    end
+end
+
+local function hookChar(char)
+    if not char then return end
+    if CONFIG.ProtectLocalCharacter and char == LP.Character then return end
+    if CONFIG.RemoveAccessories then
+        for _, a in ipairs(char:GetChildren()) do
+            if a:IsA("Accessory") then pcall(function() a:Destroy() end) end
+        end
+    end
+    scan(char)
+    if CONFIG.PlayerHighlight and char ~= LP.Character then
+        local hl = Instance.new("Highlight")
+        hl.Name = "CLAY_HL"
+        hl.FillColor = Color3.fromRGB(255,100,100)
+        hl.FillTransparency = 0.75
+        hl.OutlineColor = Color3.fromRGB(255,100,100)
+        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        hl.Adornee = char
+        hl.Parent = char
+    end
+    optimizeCharacter(char)
+end
+
+local function fixTerrain()
+    pcall(function()
+        local t = Workspace.Terrain
+        t.WaterWaveSize, t.WaterWaveSpeed, t.WaterReflectance, t.Decoration = 0,0,0,false
+        if CONFIG.KillWater then t.WaterTransparency = 1 end
+    end)
+end
+
+-- ============================================================
+-- ⚡ FAST QUEUE
+-- ============================================================
+local SPECIAL_PROCESS = {
+    ParticleEmitter=true, Trail=true, Beam=true, Smoke=true, Fire=true, Sparkles=true,
+    PointLight=true, SpotLight=true, SurfaceLight=true, Highlight=true,
+    SelectionBox=true, SelectionSphere=true,
+    Decal=true, Texture=true, SurfaceAppearance=true, SpecialMesh=true,
+    BillboardGui=true, SurfaceGui=true, ViewportFrame=true,
+    Sound=true, Accessory=true,
+}
+
+local function shouldProcess(d)
+    if SPECIAL_PROCESS[d.ClassName] then return true end
+    return d:IsA("BasePart")
+end
+
+local pending, pendingHead, pendingTail, pendingSize = {}, 1, 0, 0
+
+local function enqueue(d)
+    if not shouldProcess(d) then return end
+    if pendingSize >= CONFIG.MaxQueueSize then
+        pending[pendingHead] = nil
+        pendingHead = pendingHead + 1
+        pendingSize = pendingSize - 1
+        CLAY.Dirty = true
+    end
+    pendingTail = pendingTail + 1
+    pending[pendingTail] = d
+    pendingSize = pendingSize + 1
+end
+
+local function drain(maxPerFrame)
+    if pendingSize == 0 then return end
+    local n = math.min(pendingSize, maxPerFrame)
+    for _ = 1, n do
+        local d = pending[pendingHead]
+        pending[pendingHead] = nil
+        pendingHead = pendingHead + 1
+        pendingSize = pendingSize - 1
+        if d and d.Parent then
+            touch(d)
+            if d:IsA("BasePart") and isBall(d.Name) then initBall(d) end
+        end
+    end
+    if pendingHead > 2000 then
+        local nq = {}
+        for i = pendingHead, pendingTail do nq[#nq+1] = pending[i] end
+        pending, pendingHead, pendingTail = nq, 1, #nq
+    end
+end
+
+local function adaptiveDrainRate()
+    local fps = CLAY.Stats.fps
+    if fps == 0 then return CONFIG.BaseDrainPerFrame end
+    if fps < 25 then return 15 end
+    if fps < 40 then return 25 end
+    if fps < 55 then return 40 end
+    return math.min(80, CONFIG.BaseDrainPerFrame * 2)
+end
+
+-- ============================================================
+-- 🧹 MEMORY GUARD
+-- ============================================================
+local function pruneMemory()
+    if camIsRotating() then return end
+    local newInst = {}
+    for _, i in ipairs(CLAY.Instances) do
+        if i and i.Parent then newInst[#newInst+1] = i end
+    end
+    CLAY.Instances = newInst
+    local newConn = {}
+    for _, c in ipairs(CLAY.Connections) do
+        if c.Connected then newConn[#newConn+1] = c end
+    end
+    CLAY.Connections = newConn
+    if type(collectgarbage) == "function" then pcall(collectgarbage, "step") end
+end
+
+-- ============================================================
+-- 🧠 AUTO-AGGRESSIVE
+-- ============================================================
+local function applyAggressivePass()
+    if CLAY.Aggressive or camIsRotating() then return end
+    CLAY.Aggressive = true
+    CONFIG.RemoveAccessories, CONFIG.Remove3DGui = true, true
+    CONFIG.MuteColors, CONFIG.ClayGrade, CONFIG.MuteWorkspaceSFX = true, true, true
+    local count = 0
+    for _, d in ipairs(Workspace:GetDescendants()) do
+        if camIsRotating() then break end
+        if isProtected(d) or isLocalChar(d) or d.Name:sub(1,5) == "CLAY_" then
+            -- skip
+        elseif d:IsA("Accessory") then pcall(function() d:Destroy() end)
+        elseif d:IsA("BillboardGui") or d:IsA("SurfaceGui") or d:IsA("ViewportFrame") then
+            pcall(function() d:Destroy() end)
+        elseif d:IsA("Sound") then handleSound(d)
+        elseif d:IsA("BasePart") and not d:IsA("Terrain") and not isBall(d.Name) then
+            pcall(function()
+                if CONFIG.CacheMaterialForRestore and not CLAY.OriginalMaterial[d] then
+                    CLAY.OriginalMaterial[d] = {
+                        Material = d.Material,
+                        Reflectance = d.Reflectance,
+                        CastShadow = d.CastShadow,
+                        Color = d.Color,
+                        TextureID = d:IsA("MeshPart") and d.TextureID or nil,
+                    }
+                end
+                d.Material, d.CastShadow = Enum.Material.SmoothPlastic, false
+                if d.Color then
+                    local c = d.Color
+                    local g = c.R*0.299 + c.G*0.587 + c.B*0.114
+                    d.Color = Color3.new(c.R*0.5+g*0.5, c.G*0.5+g*0.5, c.B*0.5+g*0.5)
+                end
+            end)
+        end
+        count = count + 1
+        if count % 200 == 0 then task.wait() end
+    end
+    applyLighting()
+    if type(collectgarbage) == "function" then pcall(collectgarbage, "step") end
+end
+
+-- ============================================================
+-- 📊 HUD
+-- ============================================================
+local HUD = {}
+local pingStat = Stats.Network.ServerStatsItem["Data Ping"]
+
+local function pingColor(ms)
+    if ms < 80 then return Color3.fromRGB(120,255,140) end
+    if ms < 150 then return Color3.fromRGB(255,230,120) end
+    if ms < 250 then return Color3.fromRGB(255,170,90) end
+    return Color3.fromRGB(255,110,110)
+end
+
+local function makeHUD()
+    local pg = LP:FindFirstChild("PlayerGui")
+    if not pg then return end
+    local old = pg:FindFirstChild("CLAY_HUD")
+    if old then old:Destroy() end
+    local gui = Instance.new("ScreenGui")
+    gui.Name, gui.IgnoreGuiInset, gui.ResetOnSpawn, gui.DisplayOrder = "CLAY_HUD", true, false, 9999
+    gui.Parent = pg
+    CLAY:TrackInst(gui)
+    local f = Instance.new("Frame")
+    f.Size, f.Position = UDim2.new(0,200,0,60), UDim2.new(1,-208,0,8)
+    f.BackgroundColor3, f.BackgroundTransparency = Color3.fromRGB(20,18,16), 0.35
+    f.BorderSizePixel = 0
+    f.Parent = gui
+    Instance.new("UICorner", f).CornerRadius = UDim.new(0,8)
+    local t = Instance.new("TextLabel")
+    t.Size, t.Position = UDim2.new(1,-12,0,14), UDim2.new(0,6,0,3)
+    t.BackgroundTransparency = 1
+    t.TextColor3 = Color3.fromRGB(255,236,210)
+    t.Font, t.TextSize = Enum.Font.GothamBold, 12
+    t.TextXAlignment = Enum.TextXAlignment.Left
+    t.Text = string.format("🎨 CLAY v5.3.1 FINAL | %d", CONFIG.MaxFPS)
+    t.Parent = f
+    local ln = Instance.new("TextLabel")
+    ln.Size, ln.Position = UDim2.new(1,-12,0,22), UDim2.new(0,6,0,18)
+    ln.BackgroundTransparency = 1
+    ln.TextColor3 = Color3.fromRGB(230,230,230)
+    ln.Font, ln.TextSize = Enum.Font.GothamBold, 14
+    ln.TextXAlignment = Enum.TextXAlignment.Left
+    ln.RichText = true
+    ln.Text = "FPS <b>--</b> | Ping <b>--</b>"
+    ln.Parent = f
+    HUD.line = ln
+    if CONFIG.ShowBallStatus then
+        local bs = Instance.new("TextLabel")
+        bs.Size, bs.Position = UDim2.new(1,-12,0,16), UDim2.new(0,6,0,40)
+        bs.BackgroundTransparency = 1
+        bs.TextColor3 = Color3.fromRGB(200,200,255)
+        bs.Font, bs.TextSize = Enum.Font.Gotham, 11
+        bs.TextXAlignment = Enum.TextXAlignment.Left
+        bs.Text = "🏐 Ball: --"
+        bs.Parent = f
+        HUD.ball = bs
+    end
+end
+
+-- ============================================================
+-- 🚀 RUN
+-- ============================================================
+initProtected()          -- ★ ต้องมาก่อนเสมอ
+removeUnneededObjects()  -- ★ หลัง protected
+applyFFlags()
+applyQualityAndFPS()
+applyNetworkTweaks()
+applyLighting()
+removeAllFog()           -- ★ หลัง applyLighting
+fixTerrain()
+
+if CONFIG.ReduceCoreGui then
+    pcall(function()
+        StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Chat, false)
+        StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
+    end)
+end
+
+if CONFIG.PauseOnBlur then
+    CLAY:TrackConn(UIS.WindowFocusReleased:Connect(function() CLAY.Paused = true end))
+    CLAY:TrackConn(UIS.WindowFocused:Connect(function() CLAY.Paused = false end))
+end
+
+CLAY:TrackConn(RunService.RenderStepped:Connect(updateCamMotion))
+
+if CONFIG.ShowHUD then pcall(makeHUD) end
+if CONFIG.ShowToast then
+    CLAY:Notify("🔄 กำลังโหลด CLAY-FPS v5.3.1 FINAL...", {
+        color = Color3.fromRGB(255,220,150), duration = 3 })
+end
+
+-- Initial scans
+CLAY:TrackThread(task.spawn(function()
+    scan(Workspace)
+    scanBalls(Workspace)
+    scanCharacters()
+    scanSounds(Workspace)
+end))
+
+if LP.Character then hookChar(LP.Character) end
+CLAY:TrackConn(LP.CharacterAdded:Connect(hookChar))
+for _, p in ipairs(Players:GetPlayers()) do
+    if p ~= LP and p.Character then hookChar(p.Character) end
+end
+CLAY:TrackConn(Players.PlayerAdded:Connect(function(p)
+    CLAY:TrackConn(p.CharacterAdded:Connect(hookChar))
+end))
+
+CLAY:TrackConn(Workspace.DescendantAdded:Connect(enqueue))
+
+-- periodic character
+CLAY:TrackThread(task.spawn(function()
+    while CLAY.Running do
+        task.wait(3)
+        if CLAY.Running and not CLAY.Paused then pcall(scanCharacters) end
+    end
+end))
+
+-- Ball sampling (Heartbeat)
+CLAY:TrackThread(task.spawn(function()
+    while CLAY.Running do
+        if not CLAY.Paused then
+            for ball in pairs(CLAY.BallData) do
+                if ball.Parent then pcall(sampleBall, ball) end
+            end
+        end
+        RunService.Heartbeat:Wait()
+    end
+end))
+
+-- Ball rendering (RenderStepped)
+CLAY:TrackThread(task.spawn(function()
+    while CLAY.Running do
+        RunService.RenderStepped:Wait()
+        if not CLAY.Paused then pcall(renderBalls) end
+    end
+end))
+
+-- Main drain loop
+CLAY:TrackThread(task.spawn(function()
+    local wasRotating = false
+    while CLAY.Running do
+        if not CLAY.Paused then
+            if camIsRotating() then
+                if CONFIG.CamDrainDuringMotion > 0 and pendingSize > 0 then
+                    drain(CONFIG.CamDrainDuringMotion)
+                end
+                wasRotating = true
+            elseif wasRotating and pendingSize > 0 then
+                drain(CONFIG.CamBurstAfter)
+                if pendingSize == 0 then wasRotating = false end
+            else
+                drain(adaptiveDrainRate())
+                drainMaterials(CONFIG.MatBatchPerFrame)
+                wasRotating = false
+            end
+        end
+        RunService.Heartbeat:Wait()
+    end
+end))
+
+-- Periodic rescan
+if CONFIG.PeriodicRescan > 0 then
+    CLAY:TrackThread(task.spawn(function()
+        while CLAY.Running do
+            task.wait(CONFIG.PeriodicRescan)
+            if CLAY.Running and not CLAY.Paused and camIsStable()
+                and (CLAY.Dirty or pendingSize > 0) then
+                pcall(scan, Workspace)
+                pcall(scanBalls, Workspace)
+                pcall(scanSounds, Workspace)
+                CLAY.Dirty = false
+            end
+        end
+    end))
+end
+
+-- Memory prune
+if CONFIG.MemoryPruneInterval > 0 then
+    CLAY:TrackThread(task.spawn(function()
+        while CLAY.Running do
+            task.wait(CONFIG.MemoryPruneInterval)
+            if CLAY.Running then
+                pcall(pruneMemory)
+                CLAY.HighlightCount = 0
+                if CONFIG.DebugMemory then
+                    local mb = math.floor(collectgarbage("count") / 1024)
+                    print(string.format("[CLAY-FPS] 💾 %dMB | Q:%d | Mat:%d | Ball:%d",
+                        mb, pendingSize, matSize, (function()
+                            local n = 0; for _ in pairs(CLAY.BallData) do n = n + 1 end; return n
+                        end)()))
+                end
+            end
+        end
+    end))
+end
+
+-- HUD + Frame time monitor
+if CONFIG.ShowHUD then
+    CLAY:TrackThread(task.spawn(function()
+        local acc, frames, pingAvg = 0, 0, 0
+        while CLAY.Running do
+            local dt = RunService.RenderStepped:Wait()
+            acc, frames = acc + dt, frames + 1
+            if acc >= 0.5 then
+                local realFPS = math.floor(frames / acc + 0.5)
+                CLAY.Stats.fps = realFPS
+                CLAY.Stats.frameTime = 1 / math.max(1, realFPS)
+                local ok, p = pcall(function() return pingStat:GetValue() end)
+                if ok then pingAvg = pingAvg * 0.7 + p * 0.3 end
+                CLAY.Stats.ping = math.floor(pingAvg + 0.5)
+
+                if CONFIG.AutoAggressive and not CLAY.Aggressive
+                    and CLAY.Stats.frameTime > CONFIG.FrameTimeAggroThreshold
+                    and camIsStable() then
+                    task.spawn(function() pcall(applyAggressivePass) end)
+                end
+
+                if HUD.line and HUD.line.Parent then
+                    local disp = math.floor(realFPS * CONFIG.DisplayMultiplier + 0.5)
+                    local pCol = pingColor(pingAvg)
+                    local hex = string.format("#%02X%02X%02X",
+                        math.floor(pCol.R*255), math.floor(pCol.G*255), math.floor(pCol.B*255))
+                    HUD.line.Text = string.format(
+                        "FPS <b>%d</b> | <font color=\"%s\">Ping %dms</font>",
+                        disp, hex, math.floor(pingAvg + 0.5))
+                end
+
+                if HUD.ball and HUD.ball.Parent then
+                    local nBalls, nShot = 0, 0
+                    for ball, d in pairs(CLAY.BallData) do
+                        if ball.Parent then
+                            nBalls = nBalls + 1
+                            if d.isShot then nShot = nShot + 1 end
+                        end
+                    end
+                    local ballTxt = string.format("🏐 Ball: %d", nBalls)
+                    if nShot > 0 then ballTxt = ballTxt .. string.format(" ⚡%d SHOT", nShot) end
+                    HUD.ball.Text = ballTxt
+                end
+                acc, frames = 0, 0
+            end
+        end
+    end))
+end
+
+-- Auto-Aggressive fallback
+if CONFIG.AutoAggressive then
+    CLAY:TrackThread(task.spawn(function()
+        task.wait(CONFIG.AggroAfter)
+        if not CLAY.Running or CLAY.Aggressive then return end
+        local fps, ping = CLAY.Stats.fps, CLAY.Stats.ping
+        if fps > 0 and (fps < CONFIG.AggroFPSThreshold or ping > CONFIG.AggroPingThreshold) then
+            while camIsRotating() do task.wait() end
+            pcall(applyAggressivePass)
+            if CONFIG.ShowToast then
+                CLAY:Notify(string.format("⚠️ เครื่องช้า (FPS %d / Ping %d) — ประหยัดสูงสุด", fps, ping),
+                    { color = Color3.fromRGB(255,200,120), duration = 6 })
+            end
+        end
+    end))
+end
+
+-- Success toast
+if CONFIG.ShowToast then
+    task.delay(1.2, function()
+        if not CLAY.Running then return end
+        CLAY:Notify("✅ v5.3.1 FINAL พร้อม! ครบทุกฟีเจอร์", {
+            color = Color3.fromRGB(120,255,140), duration = CONFIG.ToastDuration })
+    end)
+end
+
+print(("[CLAY-FPS v5.3.1 FINAL] ✅ ready | ball=%s | fog=%s | unneeded=%s | cap=%d | rerun-safe")
+    :format(tostring(CONFIG.BallSmoothing), tostring(CONFIG.RemoveAllFog),
+        tostring(CONFIG.RemoveUnneededObjects), CONFIG.MaxFPS))
