@@ -1,21 +1,14 @@
---[[
-    ╔══════════════════════════════════════════════════════════════╗
-    ║  🎨 CLAY-FPS v5.3.3 — RUN LAG FIX                            ║
-    ║                                                              ║
-    ║  ★ Staggered Init  — UI ก่อน, ค่อยๆสแกน, ไม่ค้าง             ║
-    ║  ★ Combined Pass   — GetDescendants รอบเดียว (เดิม 5 รอบ)    ║
-    ║  ★ Event-Driven    — ตัด scanCharacters periodic ทุก 3 วิ      ║
-    ║  ★ Time Budget     — yield ทุก 3ms ต่อเฟรม                   ║
-    ║  ★ Deferred Loops  — drain loop เริ่มหลัง scan เสร็จ          ║
-    ║                                                              ║
-    ║  MOBILE-ONLY | Rerun-safe | Client-side                      ║
-    ╚══════════════════════════════════════════════════════════════╝
-]]
+-- ============================================================
+-- 🔄 AUTO-RELOAD (ปลอดภัยกับ Delta)
+-- ============================================================
+local GENV
+pcall(function()
+    if type(getgenv) == "function" then
+        GENV = getgenv()
+    end
+end)
+if not GENV then GENV = _G end
 
--- ============================================================
--- 🔄 AUTO-RELOAD
--- ============================================================
-local GENV = (typeof(getgenv) == "function") and getgenv() or _G
 if type(GENV.ClayFPS) == "table" and type(GENV.ClayFPS.Cleanup) == "function" then
     pcall(function() GENV.ClayFPS:Cleanup() end)
 end
@@ -34,7 +27,7 @@ local StarterGui   = game:GetService("StarterGui")
 local LP           = Players.LocalPlayer
 
 -- ============================================================
--- ⚙️ CONFIG
+-- ⚙️ CONFIG (เหมือนเดิม)
 -- ============================================================
 local CONFIG = {
     ProtectedPaths = {
@@ -42,20 +35,13 @@ local CONFIG = {
         "Workspace.gks", "Workspace.overtime",
     },
     ProtectLocalCharacter = true,
-
-    ClayLook = true,
-    ClayMapToo = false,
-    ClayGrade = true,
-    MuteColors = false,
+    ClayLook = true, ClayMapToo = false, ClayGrade = true, MuteColors = false,
     CacheMaterialForRestore = true,
-
     RemoveTextures = true, RemoveEffects = true, RemoveLights = true,
     RemoveHighlights = true, RemoveAccessories = false, Remove3DGui = false,
     RemoveShadows = true, RemoveAtmosphere = true, RemoveClouds = true,
     RemoveDepthOfField = true, RemoveSunRays = true,
-    KillWater = true, KillViewportGui = true,
-    RemoveAllFog = true,
-
+    KillWater = true, KillViewportGui = true, RemoveAllFog = true,
     RemoveUnneededObjects = true,
     UnneededObjectPaths = {
         "Workspace.Effects", "Workspace.nightsdevs", "Workspace.Marbles",
@@ -63,22 +49,16 @@ local CONFIG = {
         "Workspace.Terrain.TempVFX",
         "Workspace.Terrain.AnimationRequesterTemperaryFolderForStuff5077795305",
     },
-
     FreezeFarAnimators = true, FreezeAnimationMethod = "Pause",
     FreezeDistance = 60, UnfreezeDistance = 30,
     CleanFarHumanoids = true, MuteWorkspaceSFX = true,
     SoundMuteMode = "Mute", MuteSFX = false,
-
     AggressiveLight = true, ClockTime = 14,
-
     LowPingMode = true, OutgoingRate = 40, StreamingRadius = 512,
     EnablePauseMode = true, MorePingFFlags = true,
-
     MaxFPS = 60, UncapFPS = false, DisplayMultiplier = 1, QualityLevel = 1,
-
     EnableHitbox = true, HitboxAmount = 2.5,
     BallHighlight = true, PlayerHighlight = false, MaxHighlights = 40,
-
     BallSmoothing = true, BallPredictionMode = "Lead",
     BallCompensatePing = true, BallBaseDelay = 0.03,
     BallNearDelay = 0.01, BallFarDelay = 0.06,
@@ -86,33 +66,22 @@ local CONFIG = {
     BallMaxExtrapolate = 0.12, BallMaxDelay = 0.10,
     BallVelocityEMA = 0.35, BallShotSpeedThreshold = 80,
     BallShotDelayReduction = 0.4, HitboxSmoothFollow = true,
-
     ShowToast = true, ToastDuration = 5, ShowHUD = true, ShowPingInHUD = true,
     ShowBallStatus = true, ReduceCoreGui = false,
-
     YieldEvery = 200, PeriodicRescan = 90,
     BaseDrainPerFrame = 40, MaxQueueSize = 1500,
     MemoryPruneInterval = 120, PauseOnBlur = true,
-
-    -- ★ INIT TUNING (v5.3.3)
-    InitPhaseDelay = 0.3,        -- รอ UI render ก่อนเริ่ม scan
-    InitTimeBudget = 0.003,      -- 3ms ต่อเฟรมระหว่าง scan
-    InitObjectBatch = 30,        -- batch ย่อยตอน scan
-    DeferDrainAfterScan = true,  -- drain loop เริ่มหลัง scan เสร็จ
-
+    InitPhaseDelay = 0.3, InitTimeBudget = 0.003, InitObjectBatch = 30,
     CameraGateEnabled = true, CamRotThreshold = 0.05, CamPosThreshold = 1.5,
     CamStableTime = 0.15, CamDrainDuringMotion = 0,
     CamMaterialDuringMotion = 0, CamBurstAfter = 80,
-    MatBatchPerFrame = 4,
-    MatBatchBurstIdle = 5, MatBatchBurstCount = 100, MatAdaptiveMultiplier = true,
-
+    MatBatchPerFrame = 4, MatBatchBurstIdle = 5, MatBatchBurstCount = 100,
+    MatAdaptiveMultiplier = true,
     AutoAggressive = false, AggroAfter = 8,
     AggroFPSThreshold = 30, AggroPingThreshold = 200,
     FrameTimeAggroThreshold = 0.033,
-
     DebugMemory = false, DebugMotion = false, DebugBall = false,
 }
--- ============================================================
 
 -- ============================================================
 -- 🧠 STATE
@@ -206,7 +175,6 @@ end
 -- 🛡️ PROTECTION
 -- ============================================================
 local protectedRoots = {}
-
 local function initProtected()
     for _, path in ipairs(CONFIG.ProtectedPaths) do
         local ok, obj = pcall(function()
@@ -525,10 +493,13 @@ function CLAY:Notify(text, opts)
 end
 
 -- ============================================================
--- ⚡ FFLAGS / QUALITY / NETWORK
+-- ⚡ FFLAGS / QUALITY / NETWORK (ปลอดภัยขึ้น)
 -- ============================================================
 local function applyFFlags()
-    if type(setfflag) ~= "function" then return end
+    if type(setfflag) ~= "function" then
+        warn("[CLAY-FPS] setfflag ไม่พร้อมใช้งาน — ข้าม FFlag boost")
+        return
+    end
     if CONFIG.UncapFPS then
         pcall(setfflag, "DFIntTaskSchedulerTargetFps", "240")
         pcall(setfflag, "FFlagGameBasicSettingsFramerateCap", "false")
@@ -625,7 +596,7 @@ local function removeAllFog()
 end
 
 -- ============================================================
--- 🗑️ UNNEEDED OBJECTS (★ staggered)
+-- 🗑️ UNNEEDED OBJECTS (staggered)
 -- ============================================================
 local function resolvePath(path)
     local ok, obj = pcall(function()
@@ -645,8 +616,7 @@ local function removeUnneededStaggered()
         if not CLAY.Running then return end
         local obj = resolvePath(path)
         if obj then
-            if isProtected(obj) then
-                skipped = skipped + 1
+            if isProtected(obj) then skipped = skipped + 1
             else
                 local lpChar = LP.Character
                 local isAncestor = false
@@ -664,7 +634,7 @@ local function removeUnneededStaggered()
                 end
             end
         end
-        task.wait()  -- ★ yield ระหว่าง path
+        task.wait()
     end
     print(("[CLAY-FPS] 🗑️ ลบ %d | ข้าม %d"):format(removed, skipped))
 end
@@ -779,7 +749,7 @@ local function touch(inst)
 end
 
 -- ============================================================
--- 🔍 INIT SCAN (★ SINGLE PASS + TIME BUDGET)
+-- 🔍 INIT SCAN (single pass + time budget)
 -- ============================================================
 local function initScan()
     print("[CLAY-FPS] 🔍 เริ่มสแกน workspace...")
@@ -795,7 +765,6 @@ local function initScan()
         idx = idx + 1
 
         if cur and cur.Parent then
-            -- ★ ทุกอย่างในรอบเดียว
             touch(cur)
             if cur:IsA("BasePart") and isBall(cur.Name) then
                 initBall(cur)
@@ -810,7 +779,6 @@ local function initScan()
         end
 
         processed = processed + 1
-        -- ★ Time budget: yield ทุก 3ms
         if os.clock() - lastYield > CONFIG.InitTimeBudget then
             task.wait()
             lastYield = os.clock()
@@ -834,7 +802,7 @@ local SPECIAL_PROCESS = {
 local pending, pendingHead, pendingTail, pendingSize = {}, 1, 0, 0
 
 local function enqueue(d)
-    if not CLAY.InitDone then return end  -- ★ ระหว่าง init → scan จัดการเอง
+    if not CLAY.InitDone then return end
     if not (SPECIAL_PROCESS[d.ClassName] or d:IsA("BasePart")) then return end
     if pendingSize >= CONFIG.MaxQueueSize then
         pending[pendingHead] = nil; pendingHead = pendingHead + 1
@@ -973,7 +941,7 @@ local function makeHUD()
 end
 
 -- ============================================================
--- 🚀 PHASE 1: IMMEDIATE (UI + cheap)
+-- 🚀 PHASE 1: IMMEDIATE
 -- ============================================================
 initProtected()
 applyFFlags()
@@ -1001,10 +969,9 @@ CLAY:TrackConn(RunService.RenderStepped:Connect(updateCamMotion))
 if CONFIG.ShowHUD then pcall(makeHUD) end
 
 -- ============================================================
--- 🚀 PHASE 2: STAGGERED BACKGROUND INIT (★ หัวใจ v5.3.3)
+-- 🚀 PHASE 2: STAGGERED BACKGROUND INIT
 -- ============================================================
 CLAY:TrackThread(task.spawn(function()
-    -- ★ รอให้ UI render ก่อน
     task.wait(CONFIG.InitPhaseDelay)
     if not CLAY.Running then return end
 
@@ -1013,19 +980,12 @@ CLAY:TrackThread(task.spawn(function()
             color = Color3.fromRGB(255,220,150), duration = 3 })
     end
 
-    -- Phase 2a: ลบ objects ไม่จำเป็น (staggered)
     removeUnneededStaggered()
     task.wait()
-
-    -- Phase 2b: สแกน workspace (single pass + time budget)
     initScan()
     task.wait()
-
-    -- Phase 2c: mark init done → เปิดรับ DescendantAdded
     CLAY.InitDone = true
 
-    -- Phase 2d: เริ่ม drain loops
-    -- Main drain
     CLAY:TrackThread(task.spawn(function()
         local wasRotating = false
         while CLAY.Running do
@@ -1046,7 +1006,6 @@ CLAY:TrackThread(task.spawn(function()
         end
     end))
 
-    -- Material drain (independent)
     CLAY:TrackThread(task.spawn(function()
         while CLAY.Running do
             if not CLAY.Paused then
@@ -1062,7 +1021,6 @@ CLAY:TrackThread(task.spawn(function()
         end
     end))
 
-    -- Ball sampling
     CLAY:TrackThread(task.spawn(function()
         while CLAY.Running do
             if not CLAY.Paused then
@@ -1074,7 +1032,6 @@ CLAY:TrackThread(task.spawn(function()
         end
     end))
 
-    -- Ball rendering
     CLAY:TrackThread(task.spawn(function()
         while CLAY.Running do
             RunService.RenderStepped:Wait()
@@ -1082,7 +1039,6 @@ CLAY:TrackThread(task.spawn(function()
         end
     end))
 
-    -- HUD loop
     if CONFIG.ShowHUD then
         CLAY:TrackThread(task.spawn(function()
             local acc, frames, pingAvg = 0, 0, 0
@@ -1129,7 +1085,6 @@ CLAY:TrackThread(task.spawn(function()
         end))
     end
 
-    -- Periodic rescan (90s, gated by Dirty)
     if CONFIG.PeriodicRescan > 0 then
         CLAY:TrackThread(task.spawn(function()
             while CLAY.Running do
@@ -1142,7 +1097,6 @@ CLAY:TrackThread(task.spawn(function()
         end))
     end
 
-    -- Memory prune
     if CONFIG.MemoryPruneInterval > 0 then
         CLAY:TrackThread(task.spawn(function()
             while CLAY.Running do
@@ -1160,7 +1114,6 @@ CLAY:TrackThread(task.spawn(function()
         end))
     end
 
-    -- Auto-Aggressive fallback
     if CONFIG.AutoAggressive then
         CLAY:TrackThread(task.spawn(function()
             task.wait(CONFIG.AggroAfter)
@@ -1170,14 +1123,13 @@ CLAY:TrackThread(task.spawn(function()
                 while camIsRotating() do task.wait() end
                 pcall(applyAggressivePass)
                 if CONFIG.ShowToast then
-                    CLAY:Notify(string.format("⚠️ เครื่องช้า — ประหยัดสูงสุด", fps, ping),
+                    CLAY:Notify(string.format("⚠️ เครื่องช้า — ประหยัดสูงสุด"),
                         { color = Color3.fromRGB(255,200,120), duration = 6 })
                 end
             end
         end))
     end
 
-    -- Success toast
     if CONFIG.ShowToast then
         CLAY:Notify(string.format("✅ พร้อม! Clay %d parts", CLAY.MaterialAppliedCount), {
             color = Color3.fromRGB(120,255,140), duration = CONFIG.ToastDuration })
@@ -1185,18 +1137,16 @@ CLAY:TrackThread(task.spawn(function()
 end))
 
 -- ============================================================
--- 🔗 DESCENDANT HOOK (ทำงานหลัง InitDone)
+-- 🔗 DESCENDANT HOOK
 -- ============================================================
 CLAY:TrackConn(Workspace.DescendantAdded:Connect(function(d)
-    -- รับ character ใหม่ทันที (event-driven แทน periodic scan)
-    if d:IsA("Model") and d:FindFirstChildOfClass("Humanoid") 
+    if d:IsA("Model") and d:FindFirstChildOfClass("Humanoid")
         and d ~= LP.Character and not isProtected(d) then
         task.defer(function() if d.Parent then optimizeCharacter(d) end)
     end
-    enqueue(d)  -- ข้ามถ้า InitDone = false (scan จะจัดการเอง)
+    enqueue(d)
 end))
 
--- Character hook สำหรับผู้เล่น
 local function hookChar(char)
     if not char or not char.Parent then return end
     if CONFIG.ProtectLocalCharacter and char == LP.Character then return end
@@ -1205,7 +1155,6 @@ local function hookChar(char)
             if a:IsA("Accessory") then pcall(function() a:Destroy() end) end
         end
     end
-    -- ไม่ scan ทันที (initScan จะเก็บ) — แต่ถ้า initDone แล้วค่อย scan
     if CLAY.InitDone then
         task.defer(function() pcall(function()
             local stack = { char }
